@@ -219,7 +219,9 @@ end
 
   def test_smoke
     Pathname.glob('{stdlib,core,sig}/**/*.rbs').each do |path|
-      orig_decls = RBS::Parser.parse_signature(path.read)
+      buffer = RBS::Buffer.new(name: path, content: path.read)
+
+      orig_decls = RBS::Parser.parse_signature(buffer)
 
       io = StringIO.new
       w = RBS::Writer.new(out: io)
