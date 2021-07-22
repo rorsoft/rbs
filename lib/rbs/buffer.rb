@@ -19,18 +19,23 @@ module RBS
         ranges << range
         offset += size
       end
+
+      @locs = {}
     end
 
     def pos_to_loc(pos)
-      index = ranges.bsearch_index do |range|
-        pos < range.end ? true : false
-      end
+      @locs[pos] ||=
+        begin
+          index = ranges.bsearch_index do |range|
+            pos < range.end ? true : false
+          end
 
-      if index
-        [index + 1, pos - ranges[index].begin]
-      else
-        [ranges.size + 1, 0]
-      end
+          if index
+            [index + 1, pos - ranges[index].begin]
+          else
+            [ranges.size + 1, 0]
+          end
+        end
     end
 
     def loc_to_pos(loc)
