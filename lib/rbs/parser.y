@@ -1633,11 +1633,13 @@ PUNCTS = {
 }
 PUNCTS_RE = Regexp.union(*PUNCTS.keys)
 
-ANNOTATION_RE = Regexp.union(/%a\{.*?\}/,
-                             /%a\[.*?\]/,
-                             /%a\(.*?\)/,
-                             /%a\<.*?\>/,
-                             /%a\|.*?\|/)
+ANNOTATION_RE = Regexp.union(
+  /%a\{.*?\}/,
+  /%a\[.*?\]/,
+  /%a\(.*?\)/,
+  /%a\<.*?\>/,
+  /%a\|.*?\|/
+)
 
 escape_sequences = %w[a b e f n r s t v "].map { |l| "\\\\#{l}" }
 DBL_QUOTE_STR_ESCAPE_SEQUENCES_RE = /(#{escape_sequences.join("|")})/
@@ -1662,9 +1664,11 @@ def next_token
       start_index = charpos - input.matched.size
       end_index = charpos-1
 
-      location = RBS::Location.new(buffer: buffer,
-                                               start_pos: start_index,
-                                               end_pos: end_index)
+      location = RBS::Location.new(
+        buffer: buffer,
+        start_pos: start_index,
+        end_pos: end_index
+      )
 
       push_comment input[:string] || "", location
     else
