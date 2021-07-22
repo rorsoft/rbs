@@ -22,11 +22,6 @@ class LocatedValue
   attr_reader :location
   attr_reader :value
 
-  def self.new(...)
-    super
-  end
-
-
   def initialize(location:, value:)
     @location = location
     @value = value
@@ -120,20 +115,6 @@ def self.parse_method_type(input, variables: [], eof_re: nil)
     parser.do_parse
   ensure
     parser.reset_variable_scope
-  end
-end
-
-def leading_comment(location)
-  @comments[location.start_line-1]
-end
-
-def push_comment(string, location)
-  if (comment = leading_comment(location)) && comment.location.start_column == location.start_column
-    comment.concat(string: "#{string}\n", location: location)
-    @comments[comment.location.end_line] = comment
-  else
-    new_comment = AST::Comment.new(string: "#{string}\n", location: location)
-    @comments[new_comment.location.end_line] = new_comment
   end
 end
 
@@ -256,14 +237,20 @@ PUNCTS = {
 }
 PUNCTS_RE = Regexp.union(*PUNCTS.keys)
 
-ANNOTATION_RE = Regexp.union(/%a\{.*?\}/,
-                             /%a\[.*?\]/,
-                             /%a\(.*?\)/,
-                             /%a\<.*?\>/,
-                             /%a\|.*?\|/)
+ANNOTATION_RE = Regexp.union(
+  /%a\{.*?\}/,
+  /%a\[.*?\]/,
+  /%a\(.*?\)/,
+  /%a\<.*?\>/,
+  /%a\|.*?\|/
+)
 
 escape_sequences = %w[a b e f n r s t v "].map { |l| "\\\\#{l}" }
 DBL_QUOTE_STR_ESCAPE_SEQUENCES_RE = /(#{escape_sequences.join("|")})/
+
+def leading_comment(loc)
+  buffer.leading_comment(line: loc.start_line)
+end
 
 def next_token
   if @type
@@ -284,12 +271,7 @@ def next_token
       charpos = charpos(input)
       start_index = charpos - input.matched.size
       end_index = charpos-1
-
-      location = RBS::Location.new(buffer: buffer,
-                                               start_pos: start_index,
-                                               end_pos: end_index)
-
-      push_comment input[:string] || "", location
+      buffer.insert_comment input[:string] || "", start_index, end_index
     else
       break
     end

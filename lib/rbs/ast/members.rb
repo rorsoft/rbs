@@ -2,6 +2,13 @@ module RBS
   module AST
     module Members
       class Base
+        def comment
+          if @comment
+            @comment
+          else
+            location&.leading_comment
+          end
+        end
       end
 
       class MethodDefinition < Base
@@ -10,7 +17,6 @@ module RBS
         attr_reader :types
         attr_reader :annotations
         attr_reader :location
-        attr_reader :comment
         attr_reader :overload
 
         def initialize(name:, kind:, types:, annotations:, location:, comment:, overload:)
@@ -78,7 +84,6 @@ module RBS
         attr_reader :name
         attr_reader :type
         attr_reader :location
-        attr_reader :comment
 
         def initialize(name:, type:, location:, comment:)
           @name = name
@@ -145,7 +150,6 @@ module RBS
         attr_reader :args
         attr_reader :annotations
         attr_reader :location
-        attr_reader :comment
 
         def initialize(name:, args:, annotations:, location:, comment:)
           @name = name
@@ -220,7 +224,6 @@ module RBS
         attr_reader :ivar_name
         attr_reader :annotations
         attr_reader :location
-        attr_reader :comment
 
         def initialize(name:, type:, ivar_name:, kind:, annotations:, location:, comment:)
           @name = name
@@ -351,7 +354,6 @@ module RBS
         attr_reader :kind
         attr_reader :annotations
         attr_reader :location
-        attr_reader :comment
 
         def initialize(new_name:, old_name:, kind:, annotations:, location:, comment:)
           @new_name = new_name

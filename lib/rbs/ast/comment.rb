@@ -26,13 +26,13 @@ module RBS
         { string: string, location: location }.to_json(state)
       end
 
-      def concat(string:, location:)
+      def concat(string:, location: nil)
         @string << string
 
         if loc = @location
-          loc.concat location
+          loc << location
         else
-          @location = location
+          raise
         end
 
         self

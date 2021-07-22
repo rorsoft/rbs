@@ -84,7 +84,7 @@ rule
           members: val[6],
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
       }
 
@@ -143,7 +143,7 @@ rule
           members: val[6],
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
       }
     | annotations kMODULE start_new_scope namespace tUKEYWORD module_self_types class_members kEND {
@@ -171,7 +171,7 @@ rule
           members: val[6],
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
       }
 
@@ -266,7 +266,7 @@ rule
                                          kind: val[2].value,
                                          annotations: val[0],
                                          location: location,
-                                         comment: leading_comment(val[0].first&.location || location))
+                                         comment: nil)
       }
     | annotations kATTRREADER attribute_kind method_name attr_var_opt kCOLON type {
         location = val[1].location + val[6].location
@@ -292,7 +292,7 @@ rule
                                          kind: val[2].value,
                                          annotations: val[0],
                                          location: location,
-                                         comment: leading_comment(val[0].first&.location || location))
+                                         comment: nil)
       }
     | annotations kATTRWRITER attribute_kind keyword type {
         location = val[1].location + val[4].location
@@ -307,7 +307,7 @@ rule
                                          type: val[4],
                                          annotations: val[0],
                                          location: location,
-                                         comment: leading_comment(val[0].first&.location || location))
+                                         comment: nil)
       }
     | annotations kATTRWRITER attribute_kind method_name attr_var_opt kCOLON type {
         location = val[1].location + val[6].location
@@ -334,7 +334,7 @@ rule
                                          type: val[6],
                                          annotations: val[0],
                                          location: location,
-                                         comment: leading_comment(val[0].first&.location || location))
+                                         comment: nil)
       }
     | annotations kATTRACCESSOR attribute_kind keyword type {
         location = val[1].location + val[4].location
@@ -350,7 +350,7 @@ rule
                                            type: val[4],
                                            annotations: val[0],
                                            location: location,
-                                           comment: leading_comment(val[0].first&.location || location))
+                                           comment: nil)
       }
     | annotations kATTRACCESSOR attribute_kind method_name attr_var_opt kCOLON type {
         location = val[1].location + val[6].location
@@ -377,7 +377,7 @@ rule
                                            type: val[6],
                                            annotations: val[0],
                                            location: location,
-                                           comment: leading_comment(val[0].first&.location || location))
+                                           comment: nil)
       }
 
   attr_var_opt:
@@ -401,7 +401,7 @@ rule
           name: val[0].value,
           type: val[2],
           location: location,
-          comment: leading_comment(location)
+          comment: nil
         )
       }
     | tCLASSVAR kCOLON type {
@@ -424,7 +424,7 @@ rule
           name: val[0].value,
           type: type,
           location: location,
-          comment: leading_comment(location)
+          comment: nil
         )
       }
     | kSELF kDOT tIVAR kCOLON type {
@@ -447,7 +447,7 @@ rule
         name: val[2].value,
         type: type,
         location: location,
-        comment: leading_comment(location)
+        comment: nil
       )
     }
 
@@ -466,7 +466,7 @@ rule
           members: val[5],
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
       }
 
@@ -512,7 +512,7 @@ rule
                                       args: [],
                                       annotations: val[0],
                                       location: location,
-                                      comment: leading_comment(val[0].first&.location || location))
+                                      comment: nil)
       }
     | annotations kINCLUDE qualified_name kLBRACKET type_list kRBRACKET {
         if val[2].value.alias?
@@ -528,7 +528,7 @@ rule
                                       args: val[4],
                                       annotations: val[0],
                                       location: location,
-                                      comment: leading_comment(val[0].first&.location || location))
+                                      comment: nil)
       }
 
   extend_member:
@@ -546,7 +546,7 @@ rule
                                      args: [],
                                      annotations: val[0],
                                      location: location,
-                                     comment: leading_comment(val[0].first&.location || location))
+                                     comment: nil)
       }
     | annotations kEXTEND qualified_name kLBRACKET type_list kRBRACKET {
         if val[2].value.alias?
@@ -562,7 +562,7 @@ rule
                                      args: val[4],
                                      annotations: val[0],
                                      location: location,
-                                     comment: leading_comment(val[0].first&.location || location))
+                                     comment: nil)
     }
 
   prepend_member:
@@ -580,7 +580,7 @@ rule
                                       args: [],
                                       annotations: val[0],
                                       location: location,
-                                      comment: leading_comment(val[0].first&.location || location))
+                                      comment: nil)
       }
     | annotations kPREPEND qualified_name kLBRACKET type_list kRBRACKET {
         unless val[2].value.class?
@@ -596,7 +596,7 @@ rule
                                       args: val[4],
                                       annotations: val[0],
                                       location: location,
-                                      comment: leading_comment(val[0].first&.location || location))
+                                      comment: nil)
       }
 
   overload:
@@ -635,7 +635,7 @@ rule
           types: val[6],
           annotations: val[0],
           location: location.with_children(required: required_children, optional: optional_children),
-          comment: leading_comment(val[0].first&.location || val[2]&.location || val[3].location),
+          comment: nil,
           overload: overload || !!val[2]
         )
       }
@@ -812,7 +812,7 @@ rule
           kind: :instance,
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
       }
     | annotations kALIAS kSELF kDOT method_name kSELF kDOT method_name {
@@ -830,7 +830,7 @@ rule
           kind: :singleton,
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
       }
 
@@ -845,7 +845,7 @@ rule
           type: val[4],
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
       }
 
@@ -858,7 +858,7 @@ rule
         result = Declarations::Constant.new(name: val[0].value,
                                             type: val[2],
                                             location: location,
-                                            comment: leading_comment(location))
+                                            comment: nil)
       }
     | namespace tUKEYWORD type {
         location = (val[0] || val[1]).location + val[2].location
@@ -873,7 +873,7 @@ rule
         result = Declarations::Constant.new(name: name,
                                             type: val[2],
                                             location: location,
-                                            comment: leading_comment(location))
+                                            comment: nil)
       }
 
   global_decl:
@@ -885,7 +885,7 @@ rule
         result = Declarations::Global.new(name: val[0].value.to_sym,
                                           type: val[2],
                                           location: location,
-                                          comment: leading_comment(location))
+                                          comment: nil)
       }
 
   type:
@@ -1500,20 +1500,6 @@ def self.parse_method_type(input, variables: [], eof_re: nil)
   end
 end
 
-def leading_comment(location)
-  @comments[location.start_line-1]
-end
-
-def push_comment(string, location)
-  if (comment = leading_comment(location)) && comment.location.start_column == location.start_column
-    comment.concat(string: "#{string}\n", location: location)
-    @comments[comment.location.end_line] = comment
-  else
-    new_comment = AST::Comment.new(string: "#{string}\n", location: location)
-    @comments[new_comment.location.end_line] = new_comment
-  end
-end
-
 def new_token(type, value = input.matched)
   charpos = charpos(input)
   matched = input.matched
@@ -1663,14 +1649,7 @@ def next_token
       charpos = charpos(input)
       start_index = charpos - input.matched.size
       end_index = charpos-1
-
-      location = RBS::Location.new(
-        buffer: buffer,
-        start_pos: start_index,
-        end_pos: end_index
-      )
-
-      push_comment input[:string] || "", location
+      buffer.insert_comment input[:string] || "", start_index, end_index
     else
       break
     end

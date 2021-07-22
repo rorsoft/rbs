@@ -2,6 +2,13 @@ module RBS
   module AST
     module Declarations
       class Base
+        def comment
+          if @comment
+            @comment
+          else
+            location&.leading_comment
+          end
+        end
       end
 
       class ModuleTypeParams
@@ -187,7 +194,6 @@ module RBS
         attr_reader :super_class
         attr_reader :annotations
         attr_reader :location
-        attr_reader :comment
 
         def initialize(name:, type_params:, super_class:, members:, annotations:, location:, comment:)
           @name = name
@@ -275,7 +281,6 @@ module RBS
         attr_reader :location
         attr_reader :annotations
         attr_reader :self_types
-        attr_reader :comment
 
         def initialize(name:, type_params:, members:, self_types:, annotations:, location:, comment:)
           @name = name
@@ -321,7 +326,6 @@ module RBS
         attr_reader :members
         attr_reader :annotations
         attr_reader :location
-        attr_reader :comment
 
         include MixinHelper
 
@@ -365,7 +369,6 @@ module RBS
         attr_reader :type
         attr_reader :annotations
         attr_reader :location
-        attr_reader :comment
 
         def initialize(name:, type:, annotations:, location:, comment:)
           @name = name
@@ -403,7 +406,6 @@ module RBS
         attr_reader :name
         attr_reader :type
         attr_reader :location
-        attr_reader :comment
 
         def initialize(name:, type:, location:, comment:)
           @name = name
@@ -439,7 +441,6 @@ module RBS
         attr_reader :name
         attr_reader :type
         attr_reader :location
-        attr_reader :comment
 
         def initialize(name:, type:, location:, comment:)
           @name = name

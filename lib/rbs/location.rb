@@ -85,10 +85,17 @@ module RBS
       self
     end
 
+    def leading_comment
+      buffer.leading_comment(line: start_line)
+    end
+
     def <<(other)
-      if other
+      case other
+      when Location
         raise "Invalid concat: buffer=#{buffer.name}, other.buffer=#{other.buffer.name}" unless other.buffer == buffer
         @range = range.begin...other.end_pos
+      when Range
+        @range = range.begin...other.end
       end
       self
     end
