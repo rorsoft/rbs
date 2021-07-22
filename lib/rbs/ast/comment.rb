@@ -1,12 +1,15 @@
 module RBS
   module AST
     class Comment
-      attr_reader :string
       attr_reader :location
 
       def initialize(string:, location:)
-        @string = string
+        @string = [string]
         @location = location
+      end
+
+      def string
+        @string.join
       end
 
       def ==(other)
@@ -16,7 +19,7 @@ module RBS
       alias eql? ==
 
       def hash
-        self.class.hash ^ string.hash
+        self.class.hash ^ @string.hash
       end
 
       def to_json(state = _ = nil)
@@ -24,7 +27,7 @@ module RBS
       end
 
       def concat(string:, location:)
-        @string.concat string
+        @string << string
 
         if loc = @location
           loc.concat location
