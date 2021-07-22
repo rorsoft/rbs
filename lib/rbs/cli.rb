@@ -736,7 +736,11 @@ Examples:
       args.each do |path|
         path = Pathname(path)
         loader.each_file(path, skip_hidden: false, immediate: true) do |file_path|
-          Parser.parse_signature(file_path.read)
+          content = file_path.read
+          5.times do
+            buffer = RBS::Buffer.new(content: content, name: file_path)
+            Parser.parse_signature(buffer)
+          end
         rescue RBS::Parser::SyntaxError => ex
           loc = ex.error_value.location
           stdout.puts "#{file_path}:#{loc.start_line}:#{loc.start_column}: parse error on value: (#{ex.token_str})"
