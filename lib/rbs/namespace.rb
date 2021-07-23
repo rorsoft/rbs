@@ -8,11 +8,11 @@ module RBS
     end
 
     def self.empty
-      new(path: [], absolute: false)
+      @empty ||= new(path: [], absolute: false)
     end
 
     def self.root
-      new(path: [], absolute: true)
+      @root ||= new(path: [], absolute: true)
     end
 
     def +(other)
@@ -86,12 +86,17 @@ module RBS
       TypeName.new(name: name, namespace: parent)
     end
 
+    @@cache = {}
+
     def self.parse(string)
-      if string.start_with?("::")
-        new(path: string.split("::").drop(1).map(&:to_sym), absolute: true)
-      else
-        new(path: string.split("::").map(&:to_sym), absolute: false)
-      end
+      @@cache[string] ||=
+        begin
+          if string.start_with?("::")
+            new(path: string.split("::").drop(1).map(&:to_sym), absolute: true)
+          else
+            new(path: string.split("::").map(&:to_sym), absolute: false)
+          end
+        end
     end
 
     def ascend
