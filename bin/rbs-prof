@@ -2,8 +2,8 @@
 
 require "stackprof"
 
-out = ENV["RBS_STACKPROF_OUT"] || 'tmp/stackprof-cpu-rbs.dump'
+out = ENV["RBS_STACKPROF_OUT"] || 'tmp/stackprof-rbs.dump'
 
-StackProf.run(mode: :cpu, out: out, raw: true) do
+StackProf.run(mode: :cpu, out: out, raw: true, interval: 300) do
   load File.join(__dir__, "../exe/rbs")
 end
