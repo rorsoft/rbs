@@ -80,7 +80,7 @@ rule
         result = Declarations::Class.new(
           name: val[3].value,
           type_params: val[4]&.value || Declarations::ModuleTypeParams.empty,
-          super_class: val[5]&.value,
+          super_class: val[5],
           members: val[6],
           annotations: val[0],
           location: location,
@@ -92,19 +92,17 @@ rule
       { result = nil }
     | kLT class_name {
         loc = val[1].location.with_children(
-          required: { name: val[1].location },
+          required: { name: val[1].range },
           optional: { args: nil }
         )
-        sup = Declarations::Class::Super.new(name: val[1].value, args: [], location: loc)
-        result = LocatedValue.new(value: sup, location: val[0].location)
+        result = Declarations::Class::Super.new(name: val[1].value, args: [], location: loc)
       }
     | kLT class_name kLBRACKET type_list kRBRACKET {
         loc = (val[1].location + val[4].location).with_children(
-          required: { name: val[1].location },
-          optional: { args: val[2].location + val[4].location }
+          required: { name: val[1].range },
+          optional: { args: val[2].range.begin...val[4].range.end }
         )
-        sup = Declarations::Class::Super.new(name: val[1].value, args: val[3], location: loc)
-        result = LocatedValue.new(value: sup, location: val[0].location)
+        result = Declarations::Class::Super.new(name: val[1].value, args: val[3], location: loc)
       }
 
   module_decl:
@@ -1414,6 +1412,23 @@ class LocatedValue
       @location = Location.new(buffer: @location, range: @range)
     end
     @location
+  end
+
+  def update_value(value)
+    @value = value
+    nil
+  end
+
+  def with_value(value)
+    LocatedValue.new(value: value, location: @location, range: @range)
+  end
+
+  def range
+    if @range
+      @range
+    else
+      @location&.range
+    end
   end
 end
 
