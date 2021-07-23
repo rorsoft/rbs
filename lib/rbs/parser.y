@@ -1401,12 +1401,19 @@ MethodType = RBS::MethodType
 Annotation = RBS::AST::Annotation
 
 class LocatedValue
-  attr_reader :location
   attr_reader :value
 
-  def initialize(location:, value:)
-    @location = location
+  def initialize(location: nil, range: nil, buffer: nil, value:)
+    @location = location || buffer
     @value = value
+    @range = range
+  end
+
+  def location
+    if @location.is_a?(RBS::Buffer)
+      @location = Location.new(buffer: @location, range: @range)
+    end
+    @location
   end
 end
 
@@ -1507,12 +1514,7 @@ def new_token(type, value = input.matched)
   if matched
     start_index = charpos - matched.size
     end_index = charpos
-
-    location = RBS::Location.new(buffer: buffer,
-                                 start_pos: start_index,
-                                 end_pos: end_index)
-
-    [type, LocatedValue.new(location: location, value: value)]
+    [type, LocatedValue.new(value: value, buffer: buffer, range: start_index...end_index)]
   else
     # scanner hasn't matched yet
     [false, nil]

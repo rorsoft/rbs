@@ -19,12 +19,19 @@ MethodType = RBS::MethodType
 Annotation = RBS::AST::Annotation
 
 class LocatedValue
-  attr_reader :location
   attr_reader :value
 
-  def initialize(location:, value:)
-    @location = location
+  def initialize(location: nil, range: nil, buffer: nil, value:)
+    @location = location || buffer
     @value = value
+    @range = range
+  end
+
+  def location
+    if @location.is_a?(RBS::Buffer)
+      @location = Location.new(buffer: @location, range: @range)
+    end
+    @location
   end
 end
 
@@ -125,12 +132,7 @@ def new_token(type, value = input.matched)
   if matched
     start_index = charpos - matched.size
     end_index = charpos
-
-    location = RBS::Location.new(buffer: buffer,
-                                 start_pos: start_index,
-                                 end_pos: end_index)
-
-    [type, LocatedValue.new(location: location, value: value)]
+    [type, LocatedValue.new(value: value, buffer: buffer, range: start_index...end_index)]
   else
     # scanner hasn't matched yet
     [false, nil]
@@ -247,10 +249,6 @@ ANNOTATION_RE = Regexp.union(
 
 escape_sequences = %w[a b e f n r s t v "].map { |l| "\\\\#{l}" }
 DBL_QUOTE_STR_ESCAPE_SEQUENCES_RE = /(#{escape_sequences.join("|")})/
-
-def leading_comment(loc)
-  buffer.leading_comment(line: loc.start_line)
-end
 
 def next_token
   if @type
@@ -1877,7 +1875,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 65)
           members: val[6],
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
 
     result
@@ -1953,7 +1951,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 111)
           members: val[6],
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
 
     result
@@ -1986,7 +1984,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 149)
           members: val[6],
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
 
     result
@@ -2144,7 +2142,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 256)
                                          kind: val[2].value,
                                          annotations: val[0],
                                          location: location,
-                                         comment: leading_comment(val[0].first&.location || location))
+                                         comment: nil)
 
     result
   end
@@ -2175,7 +2173,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 271)
                                          kind: val[2].value,
                                          annotations: val[0],
                                          location: location,
-                                         comment: leading_comment(val[0].first&.location || location))
+                                         comment: nil)
 
     result
   end
@@ -2195,7 +2193,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 297)
                                          type: val[4],
                                          annotations: val[0],
                                          location: location,
-                                         comment: leading_comment(val[0].first&.location || location))
+                                         comment: nil)
 
     result
   end
@@ -2227,7 +2225,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 312)
                                          type: val[6],
                                          annotations: val[0],
                                          location: location,
-                                         comment: leading_comment(val[0].first&.location || location))
+                                         comment: nil)
 
     result
   end
@@ -2248,7 +2246,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 339)
                                            type: val[4],
                                            annotations: val[0],
                                            location: location,
-                                           comment: leading_comment(val[0].first&.location || location))
+                                           comment: nil)
 
     result
   end
@@ -2280,7 +2278,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 355)
                                            type: val[6],
                                            annotations: val[0],
                                            location: location,
-                                           comment: leading_comment(val[0].first&.location || location))
+                                           comment: nil)
 
     result
   end
@@ -2322,7 +2320,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 394)
           name: val[0].value,
           type: val[2],
           location: location,
-          comment: leading_comment(location)
+          comment: nil
         )
 
     result
@@ -2350,7 +2348,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 407)
           name: val[0].value,
           type: type,
           location: location,
-          comment: leading_comment(location)
+          comment: nil
         )
 
     result
@@ -2378,7 +2376,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 430)
         name: val[2].value,
         type: type,
         location: location,
-        comment: leading_comment(location)
+        comment: nil
       )
 
     result
@@ -2400,7 +2398,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 455)
           members: val[5],
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
 
     result
@@ -2467,7 +2465,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 501)
                                       args: [],
                                       annotations: val[0],
                                       location: location,
-                                      comment: leading_comment(val[0].first&.location || location))
+                                      comment: nil)
 
     result
   end
@@ -2488,7 +2486,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 517)
                                       args: val[4],
                                       annotations: val[0],
                                       location: location,
-                                      comment: leading_comment(val[0].first&.location || location))
+                                      comment: nil)
 
     result
   end
@@ -2509,7 +2507,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 535)
                                      args: [],
                                      annotations: val[0],
                                      location: location,
-                                     comment: leading_comment(val[0].first&.location || location))
+                                     comment: nil)
 
     result
   end
@@ -2530,7 +2528,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 551)
                                      args: val[4],
                                      annotations: val[0],
                                      location: location,
-                                     comment: leading_comment(val[0].first&.location || location))
+                                     comment: nil)
 
     result
   end
@@ -2551,7 +2549,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 569)
                                       args: [],
                                       annotations: val[0],
                                       location: location,
-                                      comment: leading_comment(val[0].first&.location || location))
+                                      comment: nil)
 
     result
   end
@@ -2572,7 +2570,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 585)
                                       args: val[4],
                                       annotations: val[0],
                                       location: location,
-                                      comment: leading_comment(val[0].first&.location || location))
+                                      comment: nil)
 
     result
   end
@@ -2623,7 +2621,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 610)
           types: val[6],
           annotations: val[0],
           location: location.with_children(required: required_children, optional: optional_children),
-          comment: leading_comment(val[0].first&.location || val[2]&.location || val[3].location),
+          comment: nil,
           overload: overload || !!val[2]
         )
 
@@ -3022,7 +3020,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 803)
           kind: :instance,
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
 
     result
@@ -3045,7 +3043,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 818)
           kind: :singleton,
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
 
     result
@@ -3063,7 +3061,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 838)
           type: val[4],
           annotations: val[0],
           location: location,
-          comment: leading_comment(val[0].first&.location || location)
+          comment: nil
         )
 
     result
@@ -3079,7 +3077,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 853)
         result = Declarations::Constant.new(name: val[0].value,
                                             type: val[2],
                                             location: location,
-                                            comment: leading_comment(location))
+                                            comment: nil)
 
     result
   end
@@ -3099,7 +3097,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 863)
         result = Declarations::Constant.new(name: name,
                                             type: val[2],
                                             location: location,
-                                            comment: leading_comment(location))
+                                            comment: nil)
 
     result
   end
@@ -3114,7 +3112,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 880)
         result = Declarations::Global.new(name: val[0].value.to_sym,
                                           type: val[2],
                                           location: location,
-                                          comment: leading_comment(location))
+                                          comment: nil)
 
     result
   end
