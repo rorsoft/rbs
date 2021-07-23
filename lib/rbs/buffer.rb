@@ -54,12 +54,12 @@ module RBS
       start_line, start_column = pos_to_loc(start_pos)
 
       if (comment = leading_comment(line: start_line)) && comment.location.start_column == start_column
-        comment.concat(string: "#{string}\n", location: start_pos...end_pos)
-        @comments[comment.location.end_line] = comment
+        comment.concat(string: "#{string}\n", range: start_pos...end_pos)
+        @comments[start_line] = comment
       else
         location = Location.new(buffer: self, start_pos: start_pos, end_pos: end_pos)
         new_comment = AST::Comment.new(string: "#{string}\n", location: location)
-        @comments[new_comment.location.end_line] = new_comment
+        @comments[start_line] = new_comment
       end
     end
 

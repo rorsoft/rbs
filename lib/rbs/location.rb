@@ -95,9 +95,13 @@ module RBS
         raise "Invalid concat: buffer=#{buffer.name}, other.buffer=#{other.buffer.name}" unless other.buffer == buffer
         @range = range.begin...other.end_pos
       when Range
-        @range = range.begin...other.end
+        append_range(other)
       end
       self
+    end
+
+    def append_range(range)
+      @range = @range.begin...range.end
     end
 
     def pred?(loc)
