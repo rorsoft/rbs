@@ -16,5 +16,11 @@ module RBS
       @charpos += s.size if s
       s
     end
+
+    def skip(pattern)
+      s = super
+      @charpos += s if s
+      s
+    end
   end
 end

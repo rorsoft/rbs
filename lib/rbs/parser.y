@@ -1645,7 +1645,7 @@ def next_token
     return new_token(false, '') if input.eos?
 
     case
-    when input.scan(/\s+/)
+    when input.skip(/\s+/)
       # skip
     when input.scan(/#(( *)|( ?(?<string>.*)))\n/)
       charpos = charpos(input)
