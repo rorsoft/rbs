@@ -58,19 +58,19 @@ rule
   annotations:
       { result = [] }
     | tANNOTATION annotations {
-        result = val[1].unshift(Annotation.new(string: val[0].value, location: val[0].location))
+        result = val[1].unshift(Annotation.new(string: value(val[0]), location: location(token: val[0])))
       }
 
   class_decl:
       annotations kCLASS start_new_scope class_name module_type_params super_class class_members kEND {
         reset_variable_scope
 
-        location = val[1].location + val[7].location
+        location = location(start_token: val[1], end_token: val[7])
         location = location.with_children(
           required: {
-            keyword: val[1].location,
+            keyword: location(token: val[1]),
             name: val[3].location,
-            end: val[7].location
+            end: location(token: val[7])
           },
           optional: {
             type_params: val[4]&.location,
@@ -80,7 +80,7 @@ rule
         result = Declarations::Class.new(
           name: val[3].value,
           type_params: val[4]&.value || Declarations::ModuleTypeParams.empty,
-          super_class: val[5],
+          super_class: val[5]&.value,
           members: val[6],
           annotations: val[0],
           location: location,
@@ -95,14 +95,23 @@ rule
           required: { name: val[1].range },
           optional: { args: nil }
         )
-        result = Declarations::Class::Super.new(name: val[1].value, args: [], location: loc)
+        result =
+          LocatedValue.new(
+            value: Declarations::Class::Super.new(name: val[1].value, args: [], location: loc),
+            location: location(token: val[0])
+          )
       }
     | kLT class_name kLBRACKET type_list kRBRACKET {
-        loc = (val[1].location + val[4].location).with_children(
+        loc = location(start_pos: val[1].location.start_pos, end_token: val[4]).with_children(
           required: { name: val[1].range },
-          optional: { args: val[2].range.begin...val[4].range.end }
+          optional: { args: tokenizer.start_pos(val[2])...tokenizer.end_pos(val[4]) }
         )
-        result = Declarations::Class::Super.new(name: val[1].value, args: val[3], location: loc)
+        result =
+          LocatedValue.new(
+            value: Declarations::Class::Super.new(name: val[1].value, args: val[3], location: loc),
+            location: location(token: val[0])
+          )
+
       }
 
   module_decl:
@@ -121,12 +130,12 @@ rule
           end
         end
 
-        location = val[1].location + val[7].location
+        location = location(start_token: val[1], end_token: val[7])
         location = location.with_children(
           required: {
-            keyword: val[1].location,
+            keyword: location(token: val[1]),
             name: val[3].location,
-            end: val[7].location
+            end: location(token: val[7])
           },
           optional: {
             type_params: val[4]&.location,
@@ -147,8 +156,8 @@ rule
     | annotations kMODULE start_new_scope namespace tUKEYWORD module_self_types class_members kEND {
         reset_variable_scope
 
-        location = val[1].location + val[7].location
-        name_loc, colon_loc = split_kw_loc(val[4].location)
+        location = location(start_token: val[1], end_token: val[7])
+        name_loc, colon_loc = split_kw_loc(location(token: val[4]))
         self_loc = case val[5].size
                    when 0
                      nil
@@ -158,12 +167,12 @@ rule
                      val[5].first.location + val[5].last.location
                    end
         location = location.with_children(
-          required: { keyword: val[1].location, name: name_loc, end: val[7].location },
+          required: { keyword: tokenizer.range(val[1]), name: name_loc, end: tokenizer.range(val[7]) },
           optional: { colon: colon_loc, type_params: nil, self_types: self_loc }
         )
 
         result = Declarations::Module.new(
-          name: RBS::TypeName.new(name: val[4].value, namespace: val[3]&.value || RBS::Namespace.empty),
+          name: RBS::TypeName.new(name: value(val[4]).to_sym, namespace: val[3]&.value || RBS::Namespace.empty),
           type_params: Declarations::ModuleTypeParams.empty,
           self_types: val[5],
           members: val[6],
@@ -176,7 +185,7 @@ rule
   colon_module_self_types:
       { result = LocatedValue.new(value: [], location: nil) }
     | kCOLON module_self_types {
-        result = LocatedValue.new(value: val[1], location: val[0].location)
+        result = LocatedValue.new(value: val[1], location: location(token: val[0]))
       }
 
   module_self_types:
@@ -191,10 +200,10 @@ rule
       qualified_name kLBRACKET type_list kRBRACKET {
         name = val[0].value
         args = val[2]
-        location = val[0].location + val[3].location
+        location = location(start_pos: val[0].location.start_pos, end_token: val[3])
         location = location.with_children(
           required: { name: val[0].location },
-          optional: { args: val[1].location + val[3].location }
+          optional: { args: tokenizer.start_pos(val[1])...tokenizer.end_pos(val[3]) }
         )
 
         case
@@ -238,27 +247,27 @@ rule
     | var_type_member
     | attribute_member
     | kPUBLIC {
-        result = Members::Public.new(location: val[0].location)
+        result = Members::Public.new(location: location(token: val[0]))
       }
     | kPRIVATE {
-        result = Members::Private.new(location: val[0].location)
+        result = Members::Private.new(location: location(token: val[0]))
       }
     | alias_member
     | signature
 
   attribute_kind:
       { result = LocatedValue.new(value: :instance, location: nil) }
-    | kSELF kDOT { result = LocatedValue.new(value: :singleton, location: val[0].location + val[1].location) }
+    | kSELF kDOT { result = LocatedValue.new(value: :singleton, location: location(start_token: val[0], end_token: val[1])) }
 
   attribute_member:
       annotations kATTRREADER attribute_kind keyword type {
-        location = val[1].location + val[4].location
-        name_loc, colon_loc = split_kw_loc(val[3].location)
+        location = location(start_token: val[1], end_pos: val[4].location.end_pos)
+        name_loc, colon_loc = split_kw_loc(location(token: val[3]))
         location = location.with_children(
-          required: { keyword: val[1].location, name: name_loc, colon: colon_loc },
+          required: { keyword: tokenizer.range(val[1]), name: name_loc, colon: colon_loc },
           optional: { ivar: nil, ivar_name: nil, kind: val[2].location }
         )
-        result = Members::AttrReader.new(name: val[3].value,
+        result = Members::AttrReader.new(name: value(val[3]),
                                          ivar_name: nil,
                                          type: val[4],
                                          kind: val[2].value,
@@ -267,7 +276,7 @@ rule
                                          comment: nil)
       }
     | annotations kATTRREADER attribute_kind method_name attr_var_opt kCOLON type {
-        location = val[1].location + val[6].location
+        location = location(start_token: val[1], end_pos: val[6].location.end_pos)
         ivar_loc = val[4]&.location
         case name_value = val[4]&.value
         when LocatedValue
@@ -281,7 +290,7 @@ rule
           ivar_loc = nil
         end
         location = location.with_children(
-          required: { keyword: val[1].location, name: val[3].location, colon: val[5].location },
+          required: { keyword: tokenizer.range(val[1]), name: val[3].location, colon: tokenizer.range(val[5]) },
           optional: { ivar: ivar_loc, ivar_name: ivar_name_loc, kind: val[2].location }
         )
         result = Members::AttrReader.new(name: val[3].value.to_sym,
@@ -293,13 +302,13 @@ rule
                                          comment: nil)
       }
     | annotations kATTRWRITER attribute_kind keyword type {
-        location = val[1].location + val[4].location
-        name_loc, colon_loc = split_kw_loc(val[3].location)
+        location = location(start_token: val[1], end_pos: val[4].location.end_pos)
+        name_loc, colon_loc = split_kw_loc(location(token: val[3]))
         location = location.with_children(
-          required: { keyword: val[1].location, name: name_loc, colon: colon_loc },
+          required: { keyword: tokenizer.range(val[1]), name: name_loc, colon: colon_loc },
           optional: { ivar: nil, ivar_name: nil, kind: val[2].location }
         )
-        result = Members::AttrWriter.new(name: val[3].value,
+        result = Members::AttrWriter.new(name: value(val[3]),
                                          ivar_name: nil,
                                          kind: val[2].value,
                                          type: val[4],
@@ -308,7 +317,7 @@ rule
                                          comment: nil)
       }
     | annotations kATTRWRITER attribute_kind method_name attr_var_opt kCOLON type {
-        location = val[1].location + val[6].location
+        location = location(start_token: val[1], end_pos: val[6].location.end_pos)
         ivar_loc = val[4]&.location
         case name_value = val[4]&.value
         when LocatedValue
@@ -322,7 +331,7 @@ rule
           ivar_loc = nil
         end
         location = location.with_children(
-          required: { keyword: val[1].location, name: val[3].location, colon: val[5].location },
+          required: { keyword: tokenizer.range(val[1]), name: val[3].location, colon: tokenizer.range(val[5]) },
           optional: { ivar: ivar_loc, ivar_name: ivar_name_loc, kind: val[2].location }
         )
 
@@ -335,14 +344,14 @@ rule
                                          comment: nil)
       }
     | annotations kATTRACCESSOR attribute_kind keyword type {
-        location = val[1].location + val[4].location
-        name_loc, colon_loc = split_kw_loc(val[3].location)
+        location = location(start_token: val[1], end_pos: val[4].location.end_pos)
+        name_loc, colon_loc = split_kw_loc(location(token: val[3]))
         location = location.with_children(
-          required: { keyword: val[1].location, name: name_loc, colon: colon_loc },
+          required: { keyword: tokenizer.range(val[1]), name: name_loc, colon: colon_loc },
           optional: { ivar: nil, ivar_name: nil, kind: val[2].location }
         )
 
-        result = Members::AttrAccessor.new(name: val[3].value,
+        result = Members::AttrAccessor.new(name: value(val[3]).to_sym,
                                            ivar_name: nil,
                                            kind: val[2].value,
                                            type: val[4],
@@ -351,7 +360,7 @@ rule
                                            comment: nil)
       }
     | annotations kATTRACCESSOR attribute_kind method_name attr_var_opt kCOLON type {
-        location = val[1].location + val[6].location
+        location = location(start_token: val[1], end_pos: val[6].location.end_pos)
         ivar_loc = val[4]&.location
         case name_value = val[4]&.value
         when LocatedValue
@@ -365,7 +374,7 @@ rule
           ivar_loc = nil
         end
         location = location.with_children(
-          required: { keyword: val[1].location, name: val[3].location, colon: val[5].location },
+          required: { keyword: tokenizer.range(val[1]), name: val[3].location, colon: tokenizer.range(val[5]) },
           optional: { ivar: ivar_loc, ivar_name: ivar_name_loc, kind: val[2].location }
         )
 
@@ -380,23 +389,23 @@ rule
 
   attr_var_opt:
       { result = nil }
-    | kLPAREN kRPAREN { result = LocatedValue.new(value: false, location: val[0].location + val[1].location) }
+    | kLPAREN kRPAREN { result = LocatedValue.new(value: false, location: location(start_token: val[0], end_token: val[1])) }
     | kLPAREN tIVAR kRPAREN {
         result = LocatedValue.new(
-          value: val[1],
-          location: val[0].location + val[2].location
+          value: LocatedValue.new(value: value(val[1]).to_sym, location: location(token: val[1])),
+          location: location(start_token: val[0], end_token: val[2])
         )
       }
 
   var_type_member:
       tIVAR kCOLON type {
-        location = (val[0].location + val[2].location).with_children(
-          required: { name: val[0].location, colon: val[1].location },
+        location = location(start_token: val[0], end_pos: val[2].location.end_pos).with_children(
+          required: { name: tokenizer.range(val[0]), colon: tokenizer.range(val[1]) },
           optional: { kind: nil }
         )
 
         result = Members::InstanceVariable.new(
-          name: val[0].value,
+          name: value(val[0]).to_sym,
           type: val[2],
           location: location,
           comment: nil
@@ -413,13 +422,13 @@ rule
           )
         end
 
-        location = (val[0].location + val[2].location).with_children(
-          required: { name: val[0].location, colon: val[1].location },
+        location = location(start_token: val[0], end_pos: val[2].location.end_pos).with_children(
+          required: { name: tokenizer.range(val[0]), colon: tokenizer.range(val[1]) },
           optional: { kind: nil }
         )
 
         result = Members::ClassVariable.new(
-          name: val[0].value,
+          name: value(val[0]).to_sym,
           type: type,
           location: location,
           comment: nil
@@ -436,13 +445,13 @@ rule
         )
       end
 
-      location = (val[0].location + val[4].location).with_children(
-        required: { name: val[2].location, colon: val[3].location },
-        optional: { kind: val[0].location + val[1].location }
+      location = location(start_token: val[0], end_pos: val[4].location.end_pos).with_children(
+        required: { name: tokenizer.range(val[2]), colon: tokenizer.range(val[3]) },
+        optional: { kind: tokenizer.start_pos(val[0])...tokenizer.end_pos(val[1]) }
       )
 
       result = Members::ClassInstanceVariable.new(
-        name: val[2].value,
+        name: value(val[2]).to_sym,
         type: type,
         location: location,
         comment: nil
@@ -453,9 +462,9 @@ rule
       annotations kINTERFACE start_new_scope interface_name module_type_params interface_members kEND {
         reset_variable_scope
 
-        location = val[1].location + val[6].location
+        location = location(start_token: val[1], end_token: val[6])
         location = location.with_children(
-          required: { keyword: val[1].location, name: val[3].location, end: val[6].location },
+          required: { keyword: tokenizer.range(val[1]), name: val[3].location, end: tokenizer.range(val[6]) },
           optional: { type_params: val[4]&.location }
         )
         result = Declarations::Interface.new(
@@ -501,8 +510,8 @@ rule
           raise SemanticsError.new("Should include module or interface", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[2].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
+        location = location(start_token: val[1], end_pos: val[2].location.end_pos).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
           optional: { args: nil }
         )
 
@@ -517,9 +526,9 @@ rule
           raise SemanticsError.new("Should include module or interface", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[5].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
-          optional: { args: val[3].location + val[5].location }
+        location = location(start_token: val[1], end_token: val[5]).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
+          optional: { args: tokenizer.start_pos(val[3])...tokenizer.end_pos(val[5]) }
         )
 
         result = Members::Include.new(name: val[2].value,
@@ -535,8 +544,8 @@ rule
           raise SemanticsError.new("Should extend module or interface", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[2].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
+        location = location(start_token: val[1], end_pos: val[2].location.end_pos).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
           optional: { args: nil }
         )
 
@@ -551,9 +560,9 @@ rule
           raise SemanticsError.new("Should extend module or interface", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[5].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
-          optional: { args: val[3].location + val[5].location }
+        location = location(start_token: val[1], end_token: val[5]).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
+          optional: { args: tokenizer.start_pos(val[3])...tokenizer.end_pos(val[5]) }
         )
 
         result = Members::Extend.new(name: val[2].value,
@@ -569,8 +578,8 @@ rule
           raise SemanticsError.new("Should prepend module", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[2].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
+        location = location(start_token: val[1], end_pos: val[2].location.end_pos).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
           optional: { args: nil }
         )
 
@@ -585,9 +594,9 @@ rule
           raise SemanticsError.new("Should prepend module", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[5].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
-          optional: { args: val[3].location + val[5].location }
+        location = location(start_token: val[1], end_token: val[5]).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
+          optional: { args: tokenizer.start_pos(val[3])...tokenizer.end_pos(val[5]) }
         )
 
         result = Members::Prepend.new(name: val[2].value,
@@ -606,9 +615,10 @@ rule
 
   method_member:
       annotations attributes overload kDEF method_kind def_name method_types {
-        location = val[3].location + val[6].last.location
+        kdef = val[3]
+        location = location(start_token: kdef, end_pos: val[6].last.location.end_pos)
 
-        required_children = { keyword: val[3].location, name: val[5].location }
+        required_children = { keyword: tokenizer.range(kdef), name: val[5].location }
         optional_children = { kind: nil, overload: nil }
 
         if val[4]
@@ -645,12 +655,12 @@ rule
 
   method_kind:
       { result = nil }
-    | kSELF kDOT { result = LocatedValue.new(value: :singleton, location: val[0].location + val[1].location) }
-    | kSELFQ kDOT { result = LocatedValue.new(value: :singleton_instance, location: val[0].location + val[1].location) }
+    | kSELF kDOT { result = LocatedValue.new(value: :singleton, location: location(start_token: val[0], end_token: val[1])) }
+    | kSELFQ kDOT { result = LocatedValue.new(value: :singleton_instance, location: location(start_token: val[0], end_token: val[1])) }
 
   method_types:
       method_type { result = [val[0]] }
-    | kDOT3 { result = [LocatedValue.new(value: :dot3, location: val[0].location)] }
+    | kDOT3 { result = [LocatedValue.new(value: :dot3, location: location(token: val[0]))] }
     | method_type kBAR method_types {
         result = val[2].unshift(val[0])
       }
@@ -659,7 +669,12 @@ rule
       start_merged_scope type_params proc_type {
         reset_variable_scope
 
-        location = (val[1] || val[2]).location + val[2].location
+        location =
+          if val[1]
+            val[1].location + val[2].location
+          else
+            val[2].location
+          end
         type_params = val[1]&.value || []
 
         type, block = val[2].value
@@ -673,56 +688,68 @@ rule
   params_opt:
       { result = nil }
     | kLPAREN params kRPAREN {
-        result = LocatedValue.new(value: val[1], location: val[0].location + val[2].location)
+        result = LocatedValue.new(value: val[1], location: location(start_token: val[0], end_token: val[2]))
       }
 
   block:
       kLBRACE simple_function_type kRBRACE {
         block = Types::Block.new(type: val[1].value, required: true)
-        result = LocatedValue.new(value: block, location: val[0].location + val[2].location)
+        result = LocatedValue.new(value: block, location: location(start_token: val[0], end_token: val[2]))
       }
     | kQUESTION kLBRACE simple_function_type kRBRACE {
         block = Types::Block.new(type: val[2].value, required: false)
-        result = LocatedValue.new(value: block, location: val[0].location + val[3].location)
+        result = LocatedValue.new(value: block, location: location(start_token: val[0], end_token: val[3]))
       }
 
   def_name:
       keyword {
-        loc = val[0].location
+        start_pos = tokenizer.start_pos(val[0])
+        end_pos = tokenizer.end_pos(val[0])
+        value = value(val[0])
 
-        result = LocatedValue.new(
-          value: val[0].value,
-          location: Location.new(buffer: loc.buffer, start_pos: loc.start_pos, end_pos: loc.end_pos - 1)
-        )
+        result = LocatedValue.new(value: value, buffer: buffer, range: start_pos...end_pos-1)
       }
     | method_name kCOLON {
         result = LocatedValue.new(value: val[0].value.to_sym,
-                                  location: val[0].location + val[1].location)
+                                  location: val[0].value)
       }
 
   method_name:
-      tOPERATOR
-    | kAMP | kHAT | kSTAR | kLT | kEXCLAMATION | kSTAR2 | kBAR
-    | method_name0
+      pMethodName1 {
+        result = LocatedValue.new(value: value(val[0]), buffer: buffer, range: tokenizer.range(val[0]))
+      }
+    | method_name0 {
+        result = LocatedValue.new(value: value(val[0]), buffer: buffer, range: tokenizer.range(val[0]))
+      }
     | method_name0 kQUESTION {
-        unless val[0].location.pred?(val[1].location)
-          raise SyntaxError.new(token_str: "kQUESTION", error_value: val[1])
+        loc0 = location(token: val[0])
+        loc1 = location(token: val[1])
+        unless loc0.pred?(loc1)
+          raise SyntaxError.new(token_str: "kQUESTION", error_value: value(val[1]))
         end
 
-        result = LocatedValue.new(value: "#{val[0].value}?",
-                                  location: val[0].location + val[1].location)
+        result = LocatedValue.new(
+          value: "#{value(val[0])}?",
+          buffer: buffer,
+          range: loc0.start_pos...loc1.end_pos
+        )
       }
     | method_name0 kEXCLAMATION {
-        unless val[0].location.pred?(val[1].location)
-          raise SyntaxError.new(token_str: "kEXCLAMATION", error_value: val[1])
+        loc0 = location(token: val[0])
+        loc1 = location(token: val[1])
+        unless loc0.pred?(loc1)
+          raise SyntaxError.new(token_str: "kEXCLAMATION", error_value: value(val[1]))
         end
 
-        result = LocatedValue.new(value: "#{val[0].value}!",
-                                  location: val[0].location + val[1].location)
+        result = LocatedValue.new(
+          value: "#{value(val[0])}!",
+          buffer: buffer,
+          range: loc0.start_pos...loc1.end_pos
+        )
       }
-    | tQUOTEDMETHOD
-    | tQUOTEDIDENT
-    | tWRITE_ATTR
+
+  pMethodName1: tQUOTEDMETHOD | tQUOTEDIDENT | tWRITE_ATTR
+    | tOPERATOR | kAMP | kHAT | kSTAR | kLT | kEXCLAMATION | kSTAR2 | kBAR
 
   method_name0: tUIDENT | tLIDENT | tINTERFACEIDENT | identifier_keywords
 
@@ -737,7 +764,7 @@ rule
     | kLBRACKET module_type_params0 kRBRACKET {
         val[1].each {|p| insert_bound_variable(p.name) }
 
-        result = LocatedValue.new(value: val[1], location: val[0].location + val[2].location)
+        result = LocatedValue.new(value: val[1], location: location(start_token: val[0], end_token: val[2]))
       }
 
   module_type_params0:
@@ -753,18 +780,18 @@ rule
       type_param_check type_param_variance tUIDENT {
         loc = case
               when l0 = val[0].location
-                l0 + val[2].location
+                l0 + location(token: val[2])
               when l1 = val[1].location
-                l1 + val[2].location
+                l1 + location(token: val[2])
               else
-                val[2].location
+                location(token: val[2])
               end
         loc = loc.with_children(
-          required: { name: val[2].location },
+          required: { name: tokenizer.range(val[2]) },
           optional: { variance: val[1].location, unchecked: val[0].location }
         )
         result = Declarations::ModuleTypeParams::TypeParam.new(
-          name: val[2].value.to_sym,
+          name: value(val[2]).to_sym,
           variance: val[1].value,
           skip_validation: val[0].value,
           location: loc
@@ -773,12 +800,12 @@ rule
 
   type_param_variance:
       { result = LocatedValue.new(value: :invariant, location: nil) }
-    | kOUT { result = LocatedValue.new(value: :covariant, location: val[0].location) }
-    | kIN { result = LocatedValue.new(value: :contravariant, location: val[0].location) }
+    | kOUT { result = LocatedValue.new(value: :covariant, location: location(token: val[0])) }
+    | kIN { result = LocatedValue.new(value: :contravariant, location: location(token: val[0])) }
 
   type_param_check:
       { result = LocatedValue.new(value: false, location: nil) }
-    | kUNCHECKED { result = LocatedValue.new(value: true, location: val[0].location) }
+    | kUNCHECKED { result = LocatedValue.new(value: true, location: location(token: val[0])) }
 
   type_params:
       { result = nil }
@@ -786,22 +813,22 @@ rule
         val[1].each {|var| insert_bound_variable(var) }
 
         result = LocatedValue.new(value: val[1],
-                                  location: val[0].location + val[2].location)
+                                  location: location(start_token: val[0], end_token: val[2]))
       }
 
   type_params0:
       tUIDENT {
-        result = [val[0].value.to_sym]
+        result = [value(val[0]).to_sym]
       }
     | type_params0 kCOMMA tUIDENT {
-        result = val[0].push(val[2].value.to_sym)
+        result = val[0].push(value(val[2]).to_sym)
       }
 
   alias_member:
       annotations kALIAS method_name method_name {
-        location = val[1].location + val[3].location
+        location = location(start_token: val[1], end_pos: val[3].location.end_pos)
         location = location.with_children(
-          required: { keyword: val[1].location, new_name: val[2].location, old_name: val[3].location },
+          required: { keyword: location(token: val[1]), new_name: val[2].location, old_name: val[3].location },
           optional: { new_kind: nil, old_kind: nil }
         )
         result = Members::Alias.new(
@@ -814,12 +841,12 @@ rule
         )
       }
     | annotations kALIAS kSELF kDOT method_name kSELF kDOT method_name {
-        location = val[1].location + val[7].location
+        location = location(start_token: val[1], end_pos: val[7].location.end_pos)
         location = location.with_children(
-          required: { keyword: val[1].location, new_name: val[4].location, old_name: val[7].location },
+          required: { keyword: tokenizer.range(val[1]), new_name: val[4].location, old_name: val[7].location },
           optional: {
-            new_kind: val[2].location + val[3].location,
-            old_kind: val[5].location + val[6].location
+            new_kind: location(start_token: val[2], end_token: val[3]),
+            old_kind: location(start_token: val[5], end_token: val[6])
           }
         )
         result = Members::Alias.new(
@@ -834,9 +861,9 @@ rule
 
   type_decl:
       annotations kTYPE type_alias_name kEQ type {
-        location = val[1].location + val[4].location
+        location = location(start_token: val[1], end_pos: val[4].location.end_pos)
         location = location.with_children(
-          required: { keyword: val[1].location, name: val[2].location, eq: val[3].location }
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location, eq: tokenizer.range(val[3]) }
         )
         result = Declarations::Alias.new(
           name: val[2].value,
@@ -851,7 +878,7 @@ rule
       class_name kCOLON type {
         location = val[0].location + val[2].location
         location = location.with_children(
-          required: { name: val[0].location, colon: val[1].location }
+          required: { name: val[0].location, colon: tokenizer.range(val[1]) }
         )
         result = Declarations::Constant.new(name: val[0].value,
                                             type: val[2],
@@ -859,15 +886,20 @@ rule
                                             comment: nil)
       }
     | namespace tUKEYWORD type {
-        location = (val[0] || val[1]).location + val[2].location
+        if val[0]
+          lhs_loc = location(start_pos: val[0].location.start_pos, end_token: val[1])
+          location = val[0].location + val[2].location
+        else
+          lhs_loc = location(token: val[1])
+          location = lhs_loc + val[2].location
+        end
 
-        lhs_loc = (val[0] || val[1]).location + val[1].location
         name_loc, colon_loc = split_kw_loc(lhs_loc)
         location = location.with_children(
           required: { name: name_loc, colon: colon_loc }
         )
 
-        name = TypeName.new(name: val[1].value, namespace: val[0]&.value || Namespace.empty)
+        name = TypeName.new(name: value(val[1]), namespace: val[0]&.value || Namespace.empty)
         result = Declarations::Constant.new(name: name,
                                             type: val[2],
                                             location: location,
@@ -876,11 +908,11 @@ rule
 
   global_decl:
       tGLOBALIDENT kCOLON type {
-        location = val[0].location + val[2].location
+        location = location(start_token: val[0], end_pos: val[2].location.end_pos)
         location = location.with_children(
-          required: { name: val[0].location, colon: val[1].location }
+          required: { name: tokenizer.range(val[0]), colon: tokenizer.range(val[1]) }
         )
-        result = Declarations::Global.new(name: val[0].value.to_sym,
+        result = Declarations::Global.new(name: value(val[0]).to_sym,
                                           type: val[2],
                                           location: location,
                                           comment: nil)
@@ -912,54 +944,58 @@ rule
 
   simple_type:
       kVOID {
-        result = Types::Bases::Void.new(location: val[0].location)
+        result = Types::Bases::Void.new(location: location(token: val[0]))
       }
     | kANY {
-        RBS.logger.warn "`any` type is deprecated. Use `untyped` instead. (#{val[0].location.to_s})"
-        result = Types::Bases::Any.new(location: val[0].location)
+        loc = location(token: val[0])
+        RBS.logger.warn "`any` type is deprecated. Use `untyped` instead. (#{loc.to_s})"
+        result = Types::Bases::Any.new(location: loc)
       }
     | kUNTYPED {
-        result = Types::Bases::Any.new(location: val[0].location)
+        result = Types::Bases::Any.new(location: location(token: val[0]))
       }
     | kBOOL {
-        result = Types::Bases::Bool.new(location: val[0].location)
+        result = Types::Bases::Bool.new(location: location(token: val[0]))
       }
     | kNIL {
-        result = Types::Bases::Nil.new(location: val[0].location)
+        result = Types::Bases::Nil.new(location: location(token: val[0]))
       }
     | kTOP {
-        result = Types::Bases::Top.new(location: val[0].location)
+        result = Types::Bases::Top.new(location: location(token: val[0]))
       }
     | kBOT {
-        result = Types::Bases::Bottom.new(location: val[0].location)
+        result = Types::Bases::Bottom.new(location: location(token: val[0]))
       }
     | kSELF {
-        result = Types::Bases::Self.new(location: val[0].location)
+        result = Types::Bases::Self.new(location: location(token: val[0]))
       }
     | kSELFQ {
-        result = Types::Optional.new(type: Types::Bases::Self.new(location: val[0].location),
-                                     location: val[0].location)
+        loc = location(token: val[0])
+        result = Types::Optional.new(
+          type: Types::Bases::Self.new(location: loc),
+          location: loc
+        )
       }
     | kINSTANCE {
-        result = Types::Bases::Instance.new(location: val[0].location)
+        result = Types::Bases::Instance.new(location: location(token: val[0]))
       }
     | kCLASS {
-        result = Types::Bases::Class.new(location: val[0].location)
+        result = Types::Bases::Class.new(location: location(token: val[0]))
       }
     | kTRUE {
-        result = Types::Literal.new(literal: true, location: val[0].location)
+        result = Types::Literal.new(literal: true, location: location(token: val[0]))
       }
     | kFALSE {
-        result = Types::Literal.new(literal: false, location: val[0].location)
+        result = Types::Literal.new(literal: false, location: location(token: val[0]))
       }
     | tINTEGER {
-        result = Types::Literal.new(literal: val[0].value, location: val[0].location)
+        result = Types::Literal.new(literal: value(val[0]), location: location(token: val[0]))
       }
     | tSTRING {
-        result = Types::Literal.new(literal: val[0].value, location: val[0].location)
+        result = Types::Literal.new(literal: value(val[0]), location: location(token: val[0]))
       }
     | tSYMBOL {
-        result = Types::Literal.new(literal: val[0].value, location: val[0].location)
+        result = Types::Literal.new(literal: value(val[0]), location: location(token: val[0]))
       }
     | qualified_name {
         name = val[0].value
@@ -994,7 +1030,8 @@ rule
     | qualified_name kLBRACKET type_list kRBRACKET {
         name = val[0].value
         args = val[2]
-        location = val[0].location + val[3].location
+        location = val[0].location + location(token: val[3])
+        args_range = tokenizer.start_pos(val[1])...tokenizer.end_pos(val[3])
 
         case
         when name.class?
@@ -1003,13 +1040,13 @@ rule
           end
           location = location.with_children(
             required: { name: val[0].location },
-            optional: { args: val[1].location + val[3].location }
+            optional: { args: args_range }
           )
           result = Types::ClassInstance.new(name: name, args: args, location: location)
         when name.interface?
           location = location.with_children(
             required: { name: val[0].location },
-            optional: { args: val[1].location + val[3].location }
+            optional: { args: args_range }
           )
           result = Types::Interface.new(name: name, args: args, location: location)
         else
@@ -1017,23 +1054,24 @@ rule
         end
       }
     | kLBRACKET kRBRACKET {
-        location = val[0].location + val[1].location
+        location = location(range: tokenizer.start_pos(val[0])...tokenizer.end_pos(val[1]))
         result = Types::Tuple.new(types: [], location: location)
       }
     | kLBRACKET type_list comma_opt kRBRACKET {
-        location = val[0].location + val[3].location
+        location = location(range: tokenizer.start_pos(val[0])...tokenizer.end_pos(val[3]))
         types = val[1]
         result = Types::Tuple.new(types: types, location: location)
       }
     | kLPAREN type kRPAREN {
         type = val[1].dup
+        loc = location(start_token: val[0], end_token: val[2])
         type.instance_eval do
-          @location = val[0].location + val[2].location
+          @location = loc
         end
         result = type
       }
     | kSINGLETON kLPAREN class_name kRPAREN {
-        location = val[0].location + val[3].location
+        location = location(start_token: val[0], end_token: val[3])
         location = location.with_children(
           required: { name: val[2].location }
         )
@@ -1041,10 +1079,11 @@ rule
       }
     | kHAT proc_type {
         type, block = val[1].value
-        result = Types::Proc.new(type: type, block: block, location: val[0].location + val[1].location)
+        location = location(start_token: val[0], end_pos: val[1].location.end_pos)
+        result = Types::Proc.new(type: type, block: block, location: location)
       }
     | simple_type kQUESTION {
-        result = Types::Optional.new(type: val[0], location: val[0].location + val[1].location)
+        result = Types::Optional.new(type: val[0], location: location(start_pos: val[0].location.start_pos, end_token: val[1]))
       }
     | record_type
 
@@ -1060,7 +1099,7 @@ rule
       kLBRACE record_fields comma_opt kRBRACE {
         result = Types::Record.new(
           fields: val[1],
-          location: val[0].location + val[3].location
+          location: location(start_token: val[0], end_token: val[3])
         )
       }
 
@@ -1074,25 +1113,25 @@ rule
 
   record_field:
       tSYMBOL kFATARROW type {
-        result = { val[0].value => val[2] }
+        result = { value(val[0]) => val[2] }
       }
     | tSTRING kFATARROW type {
-        result = { val[0].value => val[2] }
+        result = { value(val[0]) => val[2] }
       }
     | tINTEGER kFATARROW type {
-        result = { val[0].value => val[2] }
+        result = { value(val[0]) => val[2] }
       }
     | keyword type {
-        result = { val[0].value => val[1] }
+        result = { value(val[0]) => val[1] }
       }
     | identifier_keywords kCOLON type {
-        result = { val[0].value => val[2] }
+        result = { value(val[0]).to_sym => val[2] }
       }
     | tQUOTEDIDENT kCOLON type {
-        result = { val[0].value => val[2] }
+        result = { value(val[0]) => val[2] }
       }
     | tQUOTEDMETHOD kCOLON type {
-        result = { val[0].value => val[2] }
+        result = { value(val[0]) => val[2] }
       }
 
   keyword_name:
@@ -1105,7 +1144,14 @@ rule
 
   proc_type:
       params_opt block kARROW simple_type {
-        location = (val[0] || val[1] || val[2]).location + val[3].location
+        case
+        when val[0]
+          location = val[0].location + val[3].location
+        when val[1]
+          location = val[1].location + val[3].location
+        else
+          location = location(start_token: val[2], end_pos: val[3].end_pos)
+        end
 
         params = val[0]&.value || [[], [], nil, [], {}, {}, nil]
 
@@ -1130,7 +1176,7 @@ rule
 
   simple_function_type:
       kLPAREN params kRPAREN kARROW simple_type {
-        location = val[0].location + val[4].location
+        location = location(start_token: val[0], end_pos: val[4].location.end_pos)
         type = Types::Function.new(
           required_positionals: val[1][0],
           optional_positionals: val[1][1],
@@ -1145,7 +1191,7 @@ rule
         result = LocatedValue.new(value: type, location: location)
       }
     | kARROW simple_type {
-        location = val[0].location + val[1].location
+        location = location(start_token: val[0], end_pos: val[1].location.end_pos)
         type = Types::Function.new(
           required_positionals: [],
           optional_positionals: [],
@@ -1232,96 +1278,89 @@ rule
   required_positional:
       type var_name_opt {
         loc = val[0].location
-        if var_name = val[1]
-          loc = loc + var_name.location
+        if val[1]
+          var_name = value(val[1]).to_sym
+          var_loc = location(token: val[1])
+          loc = (loc + var_loc).with_children(optional: { name: var_loc })
         end
-        loc = loc.with_children(optional: { name: var_name&.location })
 
         result = Types::Function::Param.new(
           type: val[0],
-          name: var_name&.value&.to_sym,
+          name: var_name,
           location: loc
         )
       }
 
   optional_positional:
       kQUESTION type var_name_opt {
-        loc = val[0].location + val[1].location
-        if var_name = val[2]
-          loc = loc + var_name.location
+        if val[2]
+          name_range = tokenizer.range(val[2])
+          loc = location(start_token: val[0], end_pos: name_range.end)
+          name = value(val[2]).to_sym
+        else
+          loc = location(start_token: val[0], end_pos: val[1].location.end_pos)
         end
-        loc = loc.with_children(optional: { name: var_name&.location })
+        loc = loc.with_children(optional: { name: name_range })
 
-        result = Types::Function::Param.new(
-          type: val[1],
-          name: val[2]&.value&.to_sym,
-          location: loc
-        )
+        result = Types::Function::Param.new(type: val[1], name: name, location: loc)
       }
 
   rest_positional:
       kSTAR type var_name_opt {
-        loc = val[0].location + val[1].location
-        if var_name = val[2]
-          loc = loc + var_name.location
+        if val[2]
+          name_range = tokenizer.range(val[2])
+          loc = location(start_token: val[0], end_pos: name_range.end)
+          name = value(val[2]).to_sym
+        else
+          loc = location(start_token: val[0], end_pos: val[1].location.end_pos)
         end
-        loc = loc.with_children(optional: { name: var_name&.location })
+        loc = loc.with_children(optional: { name: name_range })
 
-        result = Types::Function::Param.new(
-          type: val[1],
-          name: val[2]&.value&.to_sym,
-          location: loc
-        )
+        result = Types::Function::Param.new(type: val[1], name: name, location: loc)
       }
 
   required_keyword:
       keyword_name type var_name_opt {
-        loc = val[0].location + val[1].location
-        if var_name = val[2]
-          loc = loc + var_name.location
+        if val[2]
+          name_range = tokenizer.range(val[2])
+          loc = location(start_token: val[0], end_pos: name_range.end)
+          name = value(val[2]).to_sym
+        else
+          loc = location(start_token: val[0], end_pos: val[1].location.end_pos)
         end
+        loc = loc.with_children(optional: { name: name_range })
 
-        loc = loc.with_children(optional: { name: var_name&.location })
-
-        param = Types::Function::Param.new(
-          type: val[1],
-          name: val[2]&.value&.to_sym,
-          location: loc
-        )
-        result = { val[0].value => param }
+        param = Types::Function::Param.new(type: val[1], name: name, location: loc)
+        result = { value(val[0]) => param }
       }
 
   optional_keyword:
       kQUESTION keyword_name type var_name_opt {
-        loc = val[0].location + val[2].location
-        if var_name = val[3]
-          loc = loc + var_name.location
+        if val[3]
+          name_range = tokenizer.range(val[3])
+          loc = location(start_token: val[0], end_pos: name_range.end)
+          name = value(val[3]).to_sym
+        else
+          loc = location(start_token: val[0], end_pos: val[2].location.end_pos)
         end
+        loc = loc.with_children(optional: { name: name_range })
 
-        loc = loc.with_children(optional: { name: var_name&.location })
-
-        param = Types::Function::Param.new(
-          type: val[2],
-          name: val[3]&.value&.to_sym,
-          location: loc
-        )
-        result = { val[1].value => param }
+        param = Types::Function::Param.new(type: val[2], name: name, location: loc)
+        result = { value(val[1]) => param }
       }
 
   rest_keyword:
       kSTAR2 type var_name_opt {
-        loc = val[0].location + val[1].location
-        if var_name = val[2]
-          loc = loc + var_name.location
+        if val[2]
+          name_range = tokenizer.range(val[2])
+          loc = location(start_token: val[0], end_pos: name_range.end)
+          name = value(val[2]).to_sym
+        else
+          loc = location(start_token: val[0], end_pos: val[1].location.end_pos)
         end
+        loc = loc.with_children(optional: { name: name_range })
 
-        loc = loc.with_children(optional: { name: var_name&.location })
-
-        result = Types::Function::Param.new(
-          type: val[1],
-          name: val[2]&.value&.to_sym,
-          location: loc
-        )
+        result = Types::Function::Param.new(type: val[1], name: name, location: loc)
       }
 
   var_name_opt:
@@ -1330,9 +1369,11 @@ rule
   qualified_name:
       namespace simple_name {
         namespace = val[0]&.value || Namespace.empty
-        name = val[1].value.to_sym
+        name = value(val[1]).to_sym
         type_name = TypeName.new(namespace: namespace, name: name)
-        location = (loc0 = val[0]&.location) ? loc0 + val[1].location : val[1].location
+        loc0 = val[0]&.location
+        loc1 = location(token: val[1])
+        location = loc0 ? loc0 + loc1 : loc1
         result = LocatedValue.new(value: type_name, location: location)
       }
 
@@ -1342,45 +1383,56 @@ rule
   interface_name:
       namespace tINTERFACEIDENT {
         namespace = val[0]&.value || Namespace.empty
-        name = val[1].value.to_sym
+        name = value(val[1]).to_sym
         type_name = TypeName.new(namespace: namespace, name: name)
-        location = (loc0 = val[0]&.location) ? loc0 + val[1].location : val[1].location
+        location =
+          if loc0 = val[0]&.location
+            location(start_pos: loc0.start_pos, end_token: val[1])
+          else
+            location(token: val[1])
+          end
         result = LocatedValue.new(value: type_name, location: location)
       }
 
   class_name:
       namespace tUIDENT {
         namespace = val[0]&.value || Namespace.empty
-        name = val[1].value.to_sym
+        name = value(val[1]).to_sym
         type_name = TypeName.new(namespace: namespace, name: name)
-        location = (loc0 = val[0]&.location) ? loc0 + val[1].location : val[1].location
+        loc0 = val[0]&.location
+        loc1 = location(token: val[1])
+        location = loc0 ? loc0 + loc1 : loc1
         result = LocatedValue.new(value: type_name, location: location)
       }
 
   type_alias_name:
       namespace tLIDENT {
         namespace = val[0]&.value || Namespace.empty
-        name = val[1].value.to_sym
+        name = value(val[1]).to_sym
         type_name = TypeName.new(namespace: namespace, name: name)
-        location = (loc0 = val[0]&.location) ? loc0 + val[1].location : val[1].location
+        location =
+          if loc0 = val[0]&.location
+            location(start_pos: loc0.start_pos, end_token: val[1])
+          else
+            location(token: val[1])
+          end
         result = LocatedValue.new(value: type_name, location: location)
       }
-
 
   namespace:
       {
         result = nil
       }
     | kCOLON2 {
-        result = LocatedValue.new(value: Namespace.root, location: val[0].location)
+        result = LocatedValue.new(value: Namespace.root, buffer: buffer, range: tokenizer.range(val[0]))
       }
     | kCOLON2 tNAMESPACE {
-        namespace = Namespace.parse(val[1].value).absolute!
-        result = LocatedValue.new(value: namespace, location: val[0].location + val[1].location)
+        namespace = Namespace.parse(value(val[1])).absolute!
+        result = LocatedValue.new(value: namespace, buffer: buffer, range: tokenizer.start_pos(val[0])...tokenizer.end_pos(val[1]))
       }
     | tNAMESPACE {
-        namespace = Namespace.parse(val[0].value)
-        result = LocatedValue.new(value: namespace, location: val[0].location)
+        namespace = Namespace.parse(value(val[0]))
+        result = LocatedValue.new(value: namespace, buffer: buffer, range: tokenizer.range(val[0]))
       }
 
   comma_opt:
@@ -1435,17 +1487,38 @@ end
 attr_reader :input
 attr_reader :buffer
 attr_reader :eof_re
+attr_reader :tokenizer
+
+def value(token)
+  tokenizer.value(token)
+end
+
+def location(range: nil, token: nil, start_token: nil, end_token: nil, start_pos: nil, end_pos: nil, optional: false)
+  if optional
+    unless range || token || ((start_token || start_pos) && (end_token || end_pos))
+      return
+    end
+  end
+
+  if token
+    range = tokenizer.range(token)
+  else
+    start_pos = tokenizer.start_pos(start_token) if start_token
+    end_pos = tokenizer.end_pos(end_token) if end_token
+    range = start_pos...end_pos if start_pos && end_pos
+  end
+
+  Location.new(buffer: buffer, range: range)
+end
 
 def initialize(type, buffer:, eof_re:)
   super()
   @type = type
   @buffer = buffer
-  @input = CharScanner.new(buffer.content)
+  @tokenizer = Lex.new(buffer.content)
   @eof_re = eof_re
   @eof = false
   @bound_variables_stack = []
-  @comments = {}
-  @ascii_only = buffer.content.ascii_only?
 end
 
 def start_merged_variables_scope
@@ -1521,24 +1594,20 @@ def self.parse_method_type(input, variables: [], eof_re: nil)
     parser.reset_variable_scope
   end
 end
-
-def new_token(type, value = input.matched)
-  charpos = charpos(input)
-  matched = input.matched
-
-  if matched
-    start_index = charpos - matched.size
-    end_index = charpos
-    [type, LocatedValue.new(value: value, buffer: buffer, range: start_index...end_index)]
-  else
-    # scanner hasn't matched yet
-    [false, nil]
-  end
-end
-
-def charpos(scanner)
-  scanner.charpos
-end
+#
+# def new_token(type, value = input.matched)
+#   charpos = charpos(input)
+#   matched = input.matched
+#
+#   if matched
+#     start_index = charpos - matched.size
+#     end_index = charpos
+#     [type, LocatedValue.new(value: value, buffer: buffer, range: start_index...end_index)]
+#   else
+#     # scanner hasn't matched yet
+#     [false, nil]
+#   end
+# end
 
 def empty_params_result
   [
@@ -1552,100 +1621,219 @@ def empty_params_result
   ]
 end
 
-KEYWORDS = {
-  "class" => :kCLASS,
-  "type" => :kTYPE,
-  "def" => :kDEF,
-  "self" => :kSELF,
-  "void" => :kVOID,
-  "any" => :kANY,
-  "untyped" => :kUNTYPED,
-  "top" => :kTOP,
-  "bot" => :kBOT,
-  "instance" => :kINSTANCE,
-  "bool" => :kBOOL,
-  "nil" => :kNIL,
-  "true" => :kTRUE,
-  "false" => :kFALSE,
-  "singleton" => :kSINGLETON,
-  "interface" => :kINTERFACE,
-  "end" => :kEND,
-  "include" => :kINCLUDE,
-  "extend" => :kEXTEND,
-  "prepend" => :kPREPEND,
-  "module" => :kMODULE,
-  "attr_reader" => :kATTRREADER,
-  "attr_writer" => :kATTRWRITER,
-  "attr_accessor" => :kATTRACCESSOR,
-  "public" => :kPUBLIC,
-  "private" => :kPRIVATE,
-  "alias" => :kALIAS,
-  "extension" => :kEXTENSION,
-  "incompatible" => :kINCOMPATIBLE,
-  "unchecked" => :kUNCHECKED,
-  "overload" => :kOVERLOAD,
-  "out" => :kOUT,
-  "in" => :kIN,
-}
-KEYWORDS_RE = /#{Regexp.union(*KEYWORDS.keys)}\b/
+class Lex < Lexer
+  KEYWORDS = {
+    "class" => :kCLASS,
+    "type" => :kTYPE,
+    "def" => :kDEF,
+    "self" => :kSELF,
+    "void" => :kVOID,
+    "any" => :kANY,
+    "untyped" => :kUNTYPED,
+    "top" => :kTOP,
+    "bot" => :kBOT,
+    "instance" => :kINSTANCE,
+    "bool" => :kBOOL,
+    "nil" => :kNIL,
+    "true" => :kTRUE,
+    "false" => :kFALSE,
+    "singleton" => :kSINGLETON,
+    "interface" => :kINTERFACE,
+    "end" => :kEND,
+    "include" => :kINCLUDE,
+    "extend" => :kEXTEND,
+    "prepend" => :kPREPEND,
+    "module" => :kMODULE,
+    "attr_reader" => :kATTRREADER,
+    "attr_writer" => :kATTRWRITER,
+    "attr_accessor" => :kATTRACCESSOR,
+    "public" => :kPUBLIC,
+    "private" => :kPRIVATE,
+    "alias" => :kALIAS,
+    "extension" => :kEXTENSION,
+    "incompatible" => :kINCOMPATIBLE,
+    "unchecked" => :kUNCHECKED,
+    "overload" => :kOVERLOAD,
+    "out" => :kOUT,
+    "in" => :kIN,
+  }
+  KEYWORDS_RE = /#{Regexp.union(*KEYWORDS.keys)}\b/
 
-PUNCTS = {
-  "===" => :tOPERATOR,
-  "==" => :tOPERATOR,
-  "=~" => :tOPERATOR,
-  "!~" => :tOPERATOR,
-  "!=" => :tOPERATOR,
-  ">=" => :tOPERATOR,
-  "<<" => :tOPERATOR,
-  "<=>" => :tOPERATOR,
-  "<=" => :tOPERATOR,
-  ">>" => :tOPERATOR,
-  ">" => :tOPERATOR,
-  "~" => :tOPERATOR,
-  "+@" => :tOPERATOR,
-  "+" => :tOPERATOR,
-  "[]=" => :tOPERATOR,
-  "[]" => :tOPERATOR,
-  "::" => :kCOLON2,
-  ":" => :kCOLON,
-  "(" => :kLPAREN,
-  ")" => :kRPAREN,
-  "[" => :kLBRACKET,
-  "]" => :kRBRACKET,
-  "{" => :kLBRACE,
-  "}" => :kRBRACE,
-  "," => :kCOMMA,
-  "|" => :kBAR,
-  "&" => :kAMP,
-  "^" => :kHAT,
-  "->" => :kARROW,
-  "=>" => :kFATARROW,
-  "=" => :kEQ,
-  "?" => :kQUESTION,
-  "!" => :kEXCLAMATION,
-  "**" => :kSTAR2,
-  "*" => :kSTAR,
-  "..." => :kDOT3,
-  "." => :kDOT,
-  "<" => :kLT,
-  "-@" => :tOPERATOR,
-  "-" => :tOPERATOR,
-  "/" => :tOPERATOR,
-  "`" => :tOPERATOR,
-  "%" => :tOPERATOR,
-}
-PUNCTS_RE = Regexp.union(*PUNCTS.keys)
+  PUNCTS = {
+    "===" => :tOPERATOR,
+    "==" => :tOPERATOR,
+    "=~" => :tOPERATOR,
+    "!~" => :tOPERATOR,
+    "!=" => :tOPERATOR,
+    ">=" => :tOPERATOR,
+    "<<" => :tOPERATOR,
+    "<=>" => :tOPERATOR,
+    "<=" => :tOPERATOR,
+    ">>" => :tOPERATOR,
+    ">" => :tOPERATOR,
+    "~" => :tOPERATOR,
+    "+@" => :tOPERATOR,
+    "+" => :tOPERATOR,
+    "[]=" => :tOPERATOR,
+    "[]" => :tOPERATOR,
+    "::" => :kCOLON2,
+    ":" => :kCOLON,
+    "(" => :kLPAREN,
+    ")" => :kRPAREN,
+    "[" => :kLBRACKET,
+    "]" => :kRBRACKET,
+    "{" => :kLBRACE,
+    "}" => :kRBRACE,
+    "," => :kCOMMA,
+    "|" => :kBAR,
+    "&" => :kAMP,
+    "^" => :kHAT,
+    "->" => :kARROW,
+    "=>" => :kFATARROW,
+    "=" => :kEQ,
+    "?" => :kQUESTION,
+    "!" => :kEXCLAMATION,
+    "**" => :kSTAR2,
+    "*" => :kSTAR,
+    "..." => :kDOT3,
+    "." => :kDOT,
+    "<" => :kLT,
+    "-@" => :tOPERATOR,
+    "-" => :tOPERATOR,
+    "/" => :tOPERATOR,
+    "`" => :tOPERATOR,
+    "%" => :tOPERATOR,
+  }
+  PUNCTS_RE = Regexp.union(*PUNCTS.keys)
 
-ANNOTATION_RE = Regexp.union(
-  /%a\{.*?\}/,
-  /%a\[.*?\]/,
-  /%a\(.*?\)/,
-  /%a\<.*?\>/,
-  /%a\|.*?\|/
-)
+  ANNOTATION_RE = Regexp.union(
+    /%a\{[^\}]*\}/,
+    /%a\[[^\]]*\]/,
+    /%a\([^\)]*\)/,
+    /%a\<[^>]*\>/,
+    /%a\|[^\|]*\|/
+  )
 
-escape_sequences = %w[a b e f n r s t v "].map { |l| "\\\\#{l}" }
-DBL_QUOTE_STR_ESCAPE_SEQUENCES_RE = /(#{escape_sequences.join("|")})/
+  skip(/\s+/)
+  token(:tCOMMENT, /#(( *)|( ?(?<string>.*)))\n/)
+  token_invoke(:quoted_ident, /`[a-zA-Z_]\w*`/)
+  token_invoke(:quoted_method, /`(\\`|[^` :])+`/)
+  token_invoke(:annotation, ANNOTATION_RE)
+  token(:kSELFQ, "self?")
+  token(:tWRITE_ATTR, /(([a-zA-Z]\w*)|(_\w+))=/)
+  token_invoke(:keyword, KEYWORDS_RE)
+  token_invoke(:symbol, /:((@{,2}|\$)?\w+(\?|\!)?|[|&\/%~`^]|<=>|={2,3}|=~|[<>]{2}|[<>]=?|[-+]@?|\*{1,2}|\[\]=?|![=~]?)\b?/)
+  token_invoke(:integer, /[+-]?\d[\d_]*/)
+  token_invoke(:punct, PUNCTS_RE)
+  token(:tNAMESPACE, /(::)?([A-Z]\w*::)+/)
+  token_invoke(:lkeyword_arg, /[a-z_]\w*:/)
+  token_invoke(:lkeyword_q_e_arg, /[a-z_]\w*[?!]:/)
+  token_invoke(:ukeyword_arg, /[A-Z]\w*:/)
+  token_invoke(:ukeyword_q_e_arg, /[A-Z]\w*[?!]:/)
+  token(:tGLOBALIDENT, /\$[A-Za-z_]\w*/)
+  token(:tIVAR, /@[a-zA-Z_]\w*/)
+  token(:tCLASSVAR, /@@[a-zA-Z_]\w*/)
+  token(:tINTERFACEIDENT, /_[A-Z]\w*\b/)
+  token(:tUIDENT, /[A-Z]\w*\b/)
+  token(:tLIDENT, /[a-z]\w*\b/)
+  token(:tUNDERSCOREIDENT, /_[a-z]\w*\b/)
+  token(:tPARAMNAME, /_[\w_]*\b/)
+  token_invoke(:double_quoted_string, /"(\\"|[^"])*"/)
+  token_invoke(:single_quoted_string, /'(\\'|[^'])*'/)
+
+  def quoted_ident(string)
+    string[0] = ""
+    string.chop!
+    yield :tQUOTEDIDENT, string
+  end
+
+  def quoted_method(string)
+    string[0] = ""
+    string.chop!
+    string.gsub!(/\\`/, '`')
+    yield :tQUOTEDMETHOD, string
+  end
+
+  def annotation(string)
+    string[0..2] = ""
+    string.chop!
+    string.strip!
+    yield :tANNOTATION, string
+  end
+
+  def keyword(string)
+    yield KEYWORDS[string], string
+  end
+
+  def symbol(string)
+    string[0] = ""
+    yield :tSYMBOL, string.to_sym
+  end
+
+  def integer(string)
+    yield :tINTEGER, string.to_i
+  end
+
+  def punct(string)
+    yield PUNCTS[string], string
+  end
+
+  def lkeyword_arg(string)
+    string.chop!
+    yield :tLKEYWORD, string.to_sym
+  end
+
+  def lkeyword_q_e_arg(string)
+    string.chop!
+    yield :tLKEYWORD_Q_E, string.to_sym
+  end
+
+  def ukeyword_arg(string)
+    string.chop!
+    yield :tUKEYWORD, string.to_sym
+  end
+
+  def ukeyword_q_e_arg(string)
+    string.chop!
+    yield :tUKEYWORD_Q_E, string.to_sym
+  end
+
+  def double_quoted_string(string)
+    string[0] = ""
+    string.chop!
+    string.gsub!(/\\[abefnrstv"\\]/,
+      {
+        '\a' => "\a",
+        '\b' => "\b",
+        '\e' => "\e",
+        '\f' => "\f",
+        '\n' => "\n",
+        '\r' => "\r",
+        '\s' => "\s",
+        '\t' => "\t",
+        '\v' => "\v",
+        '\"' => "\"",
+        '\\' => "\\"
+      }
+    )
+    yield :tSTRING, string
+  end
+
+  def single_quoted_string(string)
+    string[0] = ""
+    string.chop!
+    string.gsub!(/\\'/, "'")
+    yield :tSTRING, string
+  end
+
+  def on_error
+    text = scanner.peek(10)
+    start_index = scanner.charpos
+    end_index = start_index + text.length
+    location = RBS::Location.new(buffer: buffer, start_pos: start_index, end_pos: end_index)
+    raise LexerError.new(input: text, location: location)
+  end
+end
 
 def next_token
   if @type
@@ -1654,107 +1842,142 @@ def next_token
     return [:"type_#{type}", nil]
   end
 
-  return new_token(false, '') if @eof
-
-  while true
-    return new_token(false, '') if input.eos?
-
-    case
-    when input.skip(/\s+/)
-      # skip
-    when input.scan(/#(( *)|( ?(?<string>.*)))\n/)
-      charpos = charpos(input)
-      start_index = charpos - input.matched.size
-      end_index = charpos-1
-      buffer.insert_comment input[:string] || "", start_index, end_index
-    else
-      break
-    end
-  end
-
-  case
-  when eof_re && input.scan(eof_re)
+  if @eof_re && tokenizer.match?(@eof_re)
     @eof = true
-    [:tEOF, input.matched]
-  when input.scan(/`[a-zA-Z_]\w*`/)
-    s = input.matched.yield_self {|s| s[1, s.length-2] }
-    new_token(:tQUOTEDIDENT, s)
-  when input.scan(/`(\\`|[^` :])+`/)
-    s = input.matched.yield_self {|s| s[1, s.length-2] }.gsub(/\\`/, '`')
-    new_token(:tQUOTEDMETHOD, s)
-  when input.scan(ANNOTATION_RE)
-    s = input.matched.yield_self {|s| s[3, s.length-4] }.strip
-    new_token(:tANNOTATION, s)
-  when input.scan(/self\?/)
-    new_token(:kSELFQ, "self?")
-  when input.scan(/(([a-zA-Z]\w*)|(_\w+))=/)
-    new_token(:tWRITE_ATTR)
-  when input.scan(KEYWORDS_RE)
-    new_token(KEYWORDS[input.matched], input.matched.to_sym)
-  when input.scan(/:((@{,2}|\$)?\w+(\?|\!)?|[|&\/%~`^]|<=>|={2,3}|=~|[<>]{2}|[<>]=?|[-+]@?|\*{1,2}|\[\]=?|![=~]?)\b?/)
-    s = input.matched.yield_self {|s| s[1, s.length] }.to_sym
-    new_token(:tSYMBOL, s)
-  when input.scan(/[+-]?\d[\d_]*/)
-    new_token(:tINTEGER, input.matched.to_i)
-  when input.scan(PUNCTS_RE)
-    new_token(PUNCTS[input.matched])
-  when input.scan(/(::)?([A-Z]\w*::)+/)
-    new_token(:tNAMESPACE)
-  when input.scan(/[a-z_]\w*:/)
-    new_token(:tLKEYWORD, input.matched.chop.to_sym)
-  when input.scan(/[a-z_]\w*[?!]:/)
-    new_token(:tLKEYWORD_Q_E, input.matched.chop.to_sym)
-  when input.scan(/[A-Z]\w*:/)
-    new_token(:tUKEYWORD, input.matched.chop.to_sym)
-  when input.scan(/[A-Z]\w*[?!]:/)
-    new_token(:tUKEYWORD_Q_E, input.matched.chop.to_sym)
-  when input.scan(/\$[A-Za-z_]\w*/)
-    new_token(:tGLOBALIDENT)
-  when input.scan(/@[a-zA-Z_]\w*/)
-    new_token(:tIVAR, input.matched.to_sym)
-  when input.scan(/@@[a-zA-Z_]\w*/)
-    new_token(:tCLASSVAR, input.matched.to_sym)
-  when input.scan(/_[A-Z]\w*\b/)
-    new_token(:tINTERFACEIDENT)
-  when input.scan(/[A-Z]\w*\b/)
-    new_token(:tUIDENT)
-  when input.scan(/[a-z]\w*\b/)
-    new_token(:tLIDENT)
-  when input.scan(/_[a-z]\w*\b/)
-    new_token(:tUNDERSCOREIDENT)
-  when input.scan(/_[\w_]*\b/)
-    new_token(:tPARAMNAME)
-  when input.scan(/"(\\"|[^"])*"/)
-    s = input.matched.yield_self {|s| s[1, s.length - 2] }
-                     .gsub(DBL_QUOTE_STR_ESCAPE_SEQUENCES_RE) do |match|
-                       case match
-                       when '\\a' then "\a"
-                       when '\\b' then "\b"
-                       when '\\e' then "\e"
-                       when '\\f' then "\f"
-                       when '\\n' then "\n"
-                       when '\\r' then "\r"
-                       when '\\s' then "\s"
-                       when '\\t' then "\t"
-                       when '\\v' then "\v"
-                       when '\\"' then '"'
-                       end
-                     end
-    new_token(:tSTRING, s)
-  when input.scan(/'(\\'|[^'])*'/)
-    s = input.matched.yield_self {|s| s[1, s.length - 2] }.gsub(/\\'/, "'")
-    new_token(:tSTRING, s)
-  else
-    text = input.peek(10)
-    start_index = charpos(input)
-    end_index = start_index + text.length
-    location = RBS::Location.new(buffer: buffer, start_pos: start_index, end_pos: end_index)
-    raise LexerError.new(input: text, location: location)
   end
+
+  if @eof
+    pos = tokenizer.scanner.char_pos
+    return [:tEOF, "$"]
+  end
+
+  
+  ret = tokenizer.next_token() or return
+
+  if ret[0] == :tCOMMENT
+    t = ret[1]
+    value = tokenizer.value(t)
+    start_index = tokenizer.start_pos(t)
+    end_index = tokenizer.end_pos(t) - 1
+    value.sub!(/\A# ?/, '')
+    value.chomp!
+    buffer.insert_comment value, start_index, end_index
+
+    next_token()
+  else
+    ret
+  end
+
+  # return new_token(false, '') if @eof
+
+  # while true
+  #   return new_token(false, '') if input.eos?
+  #
+  #   case
+  #   when input.skip(/\s+/)
+  #     # skip
+  #   when input.scan(/#(( *)|( ?(?<string>.*)))\n/)
+  #     charpos = charpos(input)
+  #     start_index = charpos - input.matched.size
+  #     end_index = charpos-1
+  #     buffer.insert_comment input[:string] || "", start_index, end_index
+  #   else
+  #     break
+  #   end
+  # end
+
+  # case
+  # when eof_re && input.scan(eof_re)
+  #   @eof = true
+  #   [:tEOF, input.matched]
+  # when input.scan(/`[a-zA-Z_]\w*`/)
+  #   s = input.matched.yield_self {|s| s[1, s.length-2] }
+  #   new_token(:tQUOTEDIDENT, s)
+  # when input.scan(/`(\\`|[^` :])+`/)
+  #   s = input.matched.yield_self {|s| s[1, s.length-2] }.gsub(/\\`/, '`')
+  #   new_token(:tQUOTEDMETHOD, s)
+  # when input.scan(ANNOTATION_RE)
+  #   s = input.matched.yield_self {|s| s[3, s.length-4] }.strip
+  #   new_token(:tANNOTATION, s)
+  # when input.scan(/self\?/)
+  #   new_token(:kSELFQ, "self?")
+  # when input.scan(/(([a-zA-Z]\w*)|(_\w+))=/)
+  #   new_token(:tWRITE_ATTR)
+  # when input.scan(KEYWORDS_RE)
+  #   new_token(KEYWORDS[input.matched], input.matched.to_sym)
+  # when input.scan(/:((@{,2}|\$)?\w+(\?|\!)?|[|&\/%~`^]|<=>|={2,3}|=~|[<>]{2}|[<>]=?|[-+]@?|\*{1,2}|\[\]=?|![=~]?)\b?/)
+  #   s = input.matched.yield_self {|s| s[1, s.length] }.to_sym
+  #   new_token(:tSYMBOL, s)
+  # when input.scan(/[+-]?\d[\d_]*/)
+  #   new_token(:tINTEGER, input.matched.to_i)
+  # when input.scan(PUNCTS_RE)
+  #   new_token(PUNCTS[input.matched])
+  # when input.scan(/(::)?([A-Z]\w*::)+/)
+  #   new_token(:tNAMESPACE)
+  # when input.scan(/[a-z_]\w*:/)
+  #   new_token(:tLKEYWORD, input.matched.chop.to_sym)
+  # when input.scan(/[a-z_]\w*[?!]:/)
+  #   new_token(:tLKEYWORD_Q_E, input.matched.chop.to_sym)
+  # when input.scan(/[A-Z]\w*:/)
+  #   new_token(:tUKEYWORD, input.matched.chop.to_sym)
+  # when input.scan(/[A-Z]\w*[?!]:/)
+  #   new_token(:tUKEYWORD_Q_E, input.matched.chop.to_sym)
+  # when input.scan(/\$[A-Za-z_]\w*/)
+  #   new_token(:tGLOBALIDENT)
+  # when input.scan(/@[a-zA-Z_]\w*/)
+  #   new_token(:tIVAR, input.matched.to_sym)
+  # when input.scan(/@@[a-zA-Z_]\w*/)
+  #   new_token(:tCLASSVAR, input.matched.to_sym)
+  # when input.scan(/_[A-Z]\w*\b/)
+  #   new_token(:tINTERFACEIDENT)
+  # when input.scan(/[A-Z]\w*\b/)
+  #   new_token(:tUIDENT)
+  # when input.scan(/[a-z]\w*\b/)
+  #   new_token(:tLIDENT)
+  # when input.scan(/_[a-z]\w*\b/)
+  #   new_token(:tUNDERSCOREIDENT)
+  # when input.scan(/_[\w_]*\b/)
+  #   new_token(:tPARAMNAME)
+  # when input.scan(/"(\\"|[^"])*"/)
+  #   s = input.matched.yield_self {|s| s[1, s.length - 2] }
+  #                    .gsub(DBL_QUOTE_STR_ESCAPE_SEQUENCES_RE) do |match|
+  #                      case match
+  #                      when '\\a' then "\a"
+  #                      when '\\b' then "\b"
+  #                      when '\\e' then "\e"
+  #                      when '\\f' then "\f"
+  #                      when '\\n' then "\n"
+  #                      when '\\r' then "\r"
+  #                      when '\\s' then "\s"
+  #                      when '\\t' then "\t"
+  #                      when '\\v' then "\v"
+  #                      when '\\"' then '"'
+  #                      end
+  #                    end
+  #   new_token(:tSTRING, s)
+  # when input.scan(/'(\\'|[^'])*'/)
+  #   s = input.matched.yield_self {|s| s[1, s.length - 2] }.gsub(/\\'/, "'")
+  #   new_token(:tSTRING, s)
+  # else
+  # end
 end
 
 def on_error(token_id, error_value, value_stack)
-  raise SyntaxError.new(token_str: token_to_str(token_id), error_value: error_value, value_stack: value_stack)
+  raise SyntaxError.new(
+    token_str: token_to_str(token_id),
+    error_value:
+      case
+      when error_value == "$"
+        # EOF??
+        pos = tokenizer.scanner.charpos
+        LocatedValue.new(value: "$", buffer: buffer, range: pos-1...pos)
+      when tokenizer.semantic_value?(error_value)
+        LocatedValue.new(value: tokenizer.value(error_value), location: location(token: error_value))
+      else
+        error_value
+      end,
+    value_stack: value_stack
+  )
 end
 
 def split_kw_loc(loc)
@@ -1775,7 +1998,7 @@ class SyntaxError < ParsingError
     @error_value = error_value
     @value_stack = value_stack
 
-    super "parse error on value: #{error_value.inspect} (#{token_str})"
+    super "parse error on value: #{error_value.inspect} (`#{token_str}`)"
   end
 end
 

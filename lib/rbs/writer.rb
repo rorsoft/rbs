@@ -232,7 +232,7 @@ module RBS
     def method_name(name)
       s = name.to_s
 
-      if [:tOPERATOR, :kAMP, :kHAT, :kSTAR, :kLT, :kEXCLAMATION, :kSTAR2, :kBAR].include?(Parser::PUNCTS[s]) ||
+      if [:tOPERATOR, :kAMP, :kHAT, :kSTAR, :kLT, :kEXCLAMATION, :kSTAR2, :kBAR].include?(Parser::Lex::PUNCTS[s]) ||
           (/\A[a-zA-Z_]\w*[?!=]?\z/.match?(s) && !/\Aself\??\z/.match?(s))
         s
       else

@@ -434,7 +434,7 @@ module RBS
         return "{ }" if self.fields.empty?
 
         fields = self.fields.map do |key, type|
-          if key.is_a?(Symbol) && key.match?(/\A[A-Za-z_][A-Za-z_]*\z/) && !key.match?(Parser::KEYWORDS_RE)
+          if key.is_a?(Symbol) && key.match?(/\A[A-Za-z_][A-Za-z_]*\z/) && !key.match?(Parser::Lex::KEYWORDS_RE)
             "#{key}: #{type}"
           else
             "#{key.inspect} => #{type}"
@@ -691,7 +691,7 @@ module RBS
 
         def to_s
           if name
-            if /\A#{Parser::KEYWORDS_RE}\z/.match?(name)
+            if /\A#{Parser::Lex::KEYWORDS_RE}\z/.match?(name)
               "#{type} `#{name}`"
             else
               "#{type} #{name}"

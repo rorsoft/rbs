@@ -8,7 +8,7 @@ require 'racc/parser.rb'
 module RBS
   class Parser < Racc::Parser
 
-module_eval(<<'...end parser.y/module_eval...', File.join(__dir__, 'parser.y'), 1392)
+module_eval(<<'...end parser.y/module_eval...', File.join(__dir__, 'parser.y'), 1444)
 
 Types = RBS::Types
 Namespace = RBS::Namespace
@@ -55,17 +55,38 @@ end
 attr_reader :input
 attr_reader :buffer
 attr_reader :eof_re
+attr_reader :tokenizer
+
+def value(token)
+  tokenizer.value(token)
+end
+
+def location(range: nil, token: nil, start_token: nil, end_token: nil, start_pos: nil, end_pos: nil, optional: false)
+  if optional
+    unless range || token || ((start_token || start_pos) && (end_token || end_pos))
+      return
+    end
+  end
+
+  if token
+    range = tokenizer.range(token)
+  else
+    start_pos = tokenizer.start_pos(start_token) if start_token
+    end_pos = tokenizer.end_pos(end_token) if end_token
+    range = start_pos...end_pos if start_pos && end_pos
+  end
+
+  Location.new(buffer: buffer, range: range)
+end
 
 def initialize(type, buffer:, eof_re:)
   super()
   @type = type
   @buffer = buffer
-  @input = CharScanner.new(buffer.content)
+  @tokenizer = Lex.new(buffer.content)
   @eof_re = eof_re
   @eof = false
   @bound_variables_stack = []
-  @comments = {}
-  @ascii_only = buffer.content.ascii_only?
 end
 
 def start_merged_variables_scope
@@ -141,24 +162,20 @@ def self.parse_method_type(input, variables: [], eof_re: nil)
     parser.reset_variable_scope
   end
 end
-
-def new_token(type, value = input.matched)
-  charpos = charpos(input)
-  matched = input.matched
-
-  if matched
-    start_index = charpos - matched.size
-    end_index = charpos
-    [type, LocatedValue.new(value: value, buffer: buffer, range: start_index...end_index)]
-  else
-    # scanner hasn't matched yet
-    [false, nil]
-  end
-end
-
-def charpos(scanner)
-  scanner.charpos
-end
+#
+# def new_token(type, value = input.matched)
+#   charpos = charpos(input)
+#   matched = input.matched
+#
+#   if matched
+#     start_index = charpos - matched.size
+#     end_index = charpos
+#     [type, LocatedValue.new(value: value, buffer: buffer, range: start_index...end_index)]
+#   else
+#     # scanner hasn't matched yet
+#     [false, nil]
+#   end
+# end
 
 def empty_params_result
   [
@@ -172,100 +189,219 @@ def empty_params_result
   ]
 end
 
-KEYWORDS = {
-  "class" => :kCLASS,
-  "type" => :kTYPE,
-  "def" => :kDEF,
-  "self" => :kSELF,
-  "void" => :kVOID,
-  "any" => :kANY,
-  "untyped" => :kUNTYPED,
-  "top" => :kTOP,
-  "bot" => :kBOT,
-  "instance" => :kINSTANCE,
-  "bool" => :kBOOL,
-  "nil" => :kNIL,
-  "true" => :kTRUE,
-  "false" => :kFALSE,
-  "singleton" => :kSINGLETON,
-  "interface" => :kINTERFACE,
-  "end" => :kEND,
-  "include" => :kINCLUDE,
-  "extend" => :kEXTEND,
-  "prepend" => :kPREPEND,
-  "module" => :kMODULE,
-  "attr_reader" => :kATTRREADER,
-  "attr_writer" => :kATTRWRITER,
-  "attr_accessor" => :kATTRACCESSOR,
-  "public" => :kPUBLIC,
-  "private" => :kPRIVATE,
-  "alias" => :kALIAS,
-  "extension" => :kEXTENSION,
-  "incompatible" => :kINCOMPATIBLE,
-  "unchecked" => :kUNCHECKED,
-  "overload" => :kOVERLOAD,
-  "out" => :kOUT,
-  "in" => :kIN,
-}
-KEYWORDS_RE = /#{Regexp.union(*KEYWORDS.keys)}\b/
+class Lex < Lexer
+  KEYWORDS = {
+    "class" => :kCLASS,
+    "type" => :kTYPE,
+    "def" => :kDEF,
+    "self" => :kSELF,
+    "void" => :kVOID,
+    "any" => :kANY,
+    "untyped" => :kUNTYPED,
+    "top" => :kTOP,
+    "bot" => :kBOT,
+    "instance" => :kINSTANCE,
+    "bool" => :kBOOL,
+    "nil" => :kNIL,
+    "true" => :kTRUE,
+    "false" => :kFALSE,
+    "singleton" => :kSINGLETON,
+    "interface" => :kINTERFACE,
+    "end" => :kEND,
+    "include" => :kINCLUDE,
+    "extend" => :kEXTEND,
+    "prepend" => :kPREPEND,
+    "module" => :kMODULE,
+    "attr_reader" => :kATTRREADER,
+    "attr_writer" => :kATTRWRITER,
+    "attr_accessor" => :kATTRACCESSOR,
+    "public" => :kPUBLIC,
+    "private" => :kPRIVATE,
+    "alias" => :kALIAS,
+    "extension" => :kEXTENSION,
+    "incompatible" => :kINCOMPATIBLE,
+    "unchecked" => :kUNCHECKED,
+    "overload" => :kOVERLOAD,
+    "out" => :kOUT,
+    "in" => :kIN,
+  }
+  KEYWORDS_RE = /#{Regexp.union(*KEYWORDS.keys)}\b/
 
-PUNCTS = {
-  "===" => :tOPERATOR,
-  "==" => :tOPERATOR,
-  "=~" => :tOPERATOR,
-  "!~" => :tOPERATOR,
-  "!=" => :tOPERATOR,
-  ">=" => :tOPERATOR,
-  "<<" => :tOPERATOR,
-  "<=>" => :tOPERATOR,
-  "<=" => :tOPERATOR,
-  ">>" => :tOPERATOR,
-  ">" => :tOPERATOR,
-  "~" => :tOPERATOR,
-  "+@" => :tOPERATOR,
-  "+" => :tOPERATOR,
-  "[]=" => :tOPERATOR,
-  "[]" => :tOPERATOR,
-  "::" => :kCOLON2,
-  ":" => :kCOLON,
-  "(" => :kLPAREN,
-  ")" => :kRPAREN,
-  "[" => :kLBRACKET,
-  "]" => :kRBRACKET,
-  "{" => :kLBRACE,
-  "}" => :kRBRACE,
-  "," => :kCOMMA,
-  "|" => :kBAR,
-  "&" => :kAMP,
-  "^" => :kHAT,
-  "->" => :kARROW,
-  "=>" => :kFATARROW,
-  "=" => :kEQ,
-  "?" => :kQUESTION,
-  "!" => :kEXCLAMATION,
-  "**" => :kSTAR2,
-  "*" => :kSTAR,
-  "..." => :kDOT3,
-  "." => :kDOT,
-  "<" => :kLT,
-  "-@" => :tOPERATOR,
-  "-" => :tOPERATOR,
-  "/" => :tOPERATOR,
-  "`" => :tOPERATOR,
-  "%" => :tOPERATOR,
-}
-PUNCTS_RE = Regexp.union(*PUNCTS.keys)
+  PUNCTS = {
+    "===" => :tOPERATOR,
+    "==" => :tOPERATOR,
+    "=~" => :tOPERATOR,
+    "!~" => :tOPERATOR,
+    "!=" => :tOPERATOR,
+    ">=" => :tOPERATOR,
+    "<<" => :tOPERATOR,
+    "<=>" => :tOPERATOR,
+    "<=" => :tOPERATOR,
+    ">>" => :tOPERATOR,
+    ">" => :tOPERATOR,
+    "~" => :tOPERATOR,
+    "+@" => :tOPERATOR,
+    "+" => :tOPERATOR,
+    "[]=" => :tOPERATOR,
+    "[]" => :tOPERATOR,
+    "::" => :kCOLON2,
+    ":" => :kCOLON,
+    "(" => :kLPAREN,
+    ")" => :kRPAREN,
+    "[" => :kLBRACKET,
+    "]" => :kRBRACKET,
+    "{" => :kLBRACE,
+    "}" => :kRBRACE,
+    "," => :kCOMMA,
+    "|" => :kBAR,
+    "&" => :kAMP,
+    "^" => :kHAT,
+    "->" => :kARROW,
+    "=>" => :kFATARROW,
+    "=" => :kEQ,
+    "?" => :kQUESTION,
+    "!" => :kEXCLAMATION,
+    "**" => :kSTAR2,
+    "*" => :kSTAR,
+    "..." => :kDOT3,
+    "." => :kDOT,
+    "<" => :kLT,
+    "-@" => :tOPERATOR,
+    "-" => :tOPERATOR,
+    "/" => :tOPERATOR,
+    "`" => :tOPERATOR,
+    "%" => :tOPERATOR,
+  }
+  PUNCTS_RE = Regexp.union(*PUNCTS.keys)
 
-ANNOTATION_RE = Regexp.union(
-  /%a\{.*?\}/,
-  /%a\[.*?\]/,
-  /%a\(.*?\)/,
-  /%a\<.*?\>/,
-  /%a\|.*?\|/
-)
+  ANNOTATION_RE = Regexp.union(
+    /%a\{[^\}]*\}/,
+    /%a\[[^\]]*\]/,
+    /%a\([^\)]*\)/,
+    /%a\<[^>]*\>/,
+    /%a\|[^\|]*\|/
+  )
 
-escape_sequences = %w[a b e f n r s t v "].map { |l| "\\\\#{l}" }
-DBL_QUOTE_STR_ESCAPE_SEQUENCES_RE = /(#{escape_sequences.join("|")})/
+  skip(/\s+/)
+  token(:tCOMMENT, /#(( *)|( ?(?<string>.*)))\n/)
+  token_invoke(:quoted_ident, /`[a-zA-Z_]\w*`/)
+  token_invoke(:quoted_method, /`(\\`|[^` :])+`/)
+  token_invoke(:annotation, ANNOTATION_RE)
+  token(:kSELFQ, "self?")
+  token(:tWRITE_ATTR, /(([a-zA-Z]\w*)|(_\w+))=/)
+  token_invoke(:keyword, KEYWORDS_RE)
+  token_invoke(:symbol, /:((@{,2}|\$)?\w+(\?|\!)?|[|&\/%~`^]|<=>|={2,3}|=~|[<>]{2}|[<>]=?|[-+]@?|\*{1,2}|\[\]=?|![=~]?)\b?/)
+  token_invoke(:integer, /[+-]?\d[\d_]*/)
+  token_invoke(:punct, PUNCTS_RE)
+  token(:tNAMESPACE, /(::)?([A-Z]\w*::)+/)
+  token_invoke(:lkeyword_arg, /[a-z_]\w*:/)
+  token_invoke(:lkeyword_q_e_arg, /[a-z_]\w*[?!]:/)
+  token_invoke(:ukeyword_arg, /[A-Z]\w*:/)
+  token_invoke(:ukeyword_q_e_arg, /[A-Z]\w*[?!]:/)
+  token(:tGLOBALIDENT, /\$[A-Za-z_]\w*/)
+  token(:tIVAR, /@[a-zA-Z_]\w*/)
+  token(:tCLASSVAR, /@@[a-zA-Z_]\w*/)
+  token(:tINTERFACEIDENT, /_[A-Z]\w*\b/)
+  token(:tUIDENT, /[A-Z]\w*\b/)
+  token(:tLIDENT, /[a-z]\w*\b/)
+  token(:tUNDERSCOREIDENT, /_[a-z]\w*\b/)
+  token(:tPARAMNAME, /_[\w_]*\b/)
+  token_invoke(:double_quoted_string, /"(\\"|[^"])*"/)
+  token_invoke(:single_quoted_string, /'(\\'|[^'])*'/)
+
+  def quoted_ident(string)
+    string[0] = ""
+    string.chop!
+    yield :tQUOTEDIDENT, string
+  end
+
+  def quoted_method(string)
+    string[0] = ""
+    string.chop!
+    string.gsub!(/\\`/, '`')
+    yield :tQUOTEDMETHOD, string
+  end
+
+  def annotation(string)
+    string[0..2] = ""
+    string.chop!
+    string.strip!
+    yield :tANNOTATION, string
+  end
+
+  def keyword(string)
+    yield KEYWORDS[string], string
+  end
+
+  def symbol(string)
+    string[0] = ""
+    yield :tSYMBOL, string.to_sym
+  end
+
+  def integer(string)
+    yield :tINTEGER, string.to_i
+  end
+
+  def punct(string)
+    yield PUNCTS[string], string
+  end
+
+  def lkeyword_arg(string)
+    string.chop!
+    yield :tLKEYWORD, string.to_sym
+  end
+
+  def lkeyword_q_e_arg(string)
+    string.chop!
+    yield :tLKEYWORD_Q_E, string.to_sym
+  end
+
+  def ukeyword_arg(string)
+    string.chop!
+    yield :tUKEYWORD, string.to_sym
+  end
+
+  def ukeyword_q_e_arg(string)
+    string.chop!
+    yield :tUKEYWORD_Q_E, string.to_sym
+  end
+
+  def double_quoted_string(string)
+    string[0] = ""
+    string.chop!
+    string.gsub!(/\\[abefnrstv"\\]/,
+      {
+        '\a' => "\a",
+        '\b' => "\b",
+        '\e' => "\e",
+        '\f' => "\f",
+        '\n' => "\n",
+        '\r' => "\r",
+        '\s' => "\s",
+        '\t' => "\t",
+        '\v' => "\v",
+        '\"' => "\"",
+        '\\' => "\\"
+      }
+    )
+    yield :tSTRING, string
+  end
+
+  def single_quoted_string(string)
+    string[0] = ""
+    string.chop!
+    string.gsub!(/\\'/, "'")
+    yield :tSTRING, string
+  end
+
+  def on_error
+    text = scanner.peek(10)
+    start_index = scanner.charpos
+    end_index = start_index + text.length
+    location = RBS::Location.new(buffer: buffer, start_pos: start_index, end_pos: end_index)
+    raise LexerError.new(input: text, location: location)
+  end
+end
 
 def next_token
   if @type
@@ -274,107 +410,141 @@ def next_token
     return [:"type_#{type}", nil]
   end
 
-  return new_token(false, '') if @eof
-
-  while true
-    return new_token(false, '') if input.eos?
-
-    case
-    when input.skip(/\s+/)
-      # skip
-    when input.scan(/#(( *)|( ?(?<string>.*)))\n/)
-      charpos = charpos(input)
-      start_index = charpos - input.matched.size
-      end_index = charpos-1
-      buffer.insert_comment input[:string] || "", start_index, end_index
-    else
-      break
-    end
-  end
-
-  case
-  when eof_re && input.scan(eof_re)
+  if @eof_re && tokenizer.match?(@eof_re)
     @eof = true
-    [:tEOF, input.matched]
-  when input.scan(/`[a-zA-Z_]\w*`/)
-    s = input.matched.yield_self {|s| s[1, s.length-2] }
-    new_token(:tQUOTEDIDENT, s)
-  when input.scan(/`(\\`|[^` :])+`/)
-    s = input.matched.yield_self {|s| s[1, s.length-2] }.gsub(/\\`/, '`')
-    new_token(:tQUOTEDMETHOD, s)
-  when input.scan(ANNOTATION_RE)
-    s = input.matched.yield_self {|s| s[3, s.length-4] }.strip
-    new_token(:tANNOTATION, s)
-  when input.scan(/self\?/)
-    new_token(:kSELFQ, "self?")
-  when input.scan(/(([a-zA-Z]\w*)|(_\w+))=/)
-    new_token(:tWRITE_ATTR)
-  when input.scan(KEYWORDS_RE)
-    new_token(KEYWORDS[input.matched], input.matched.to_sym)
-  when input.scan(/:((@{,2}|\$)?\w+(\?|\!)?|[|&\/%~`^]|<=>|={2,3}|=~|[<>]{2}|[<>]=?|[-+]@?|\*{1,2}|\[\]=?|![=~]?)\b?/)
-    s = input.matched.yield_self {|s| s[1, s.length] }.to_sym
-    new_token(:tSYMBOL, s)
-  when input.scan(/[+-]?\d[\d_]*/)
-    new_token(:tINTEGER, input.matched.to_i)
-  when input.scan(PUNCTS_RE)
-    new_token(PUNCTS[input.matched])
-  when input.scan(/(::)?([A-Z]\w*::)+/)
-    new_token(:tNAMESPACE)
-  when input.scan(/[a-z_]\w*:/)
-    new_token(:tLKEYWORD, input.matched.chop.to_sym)
-  when input.scan(/[a-z_]\w*[?!]:/)
-    new_token(:tLKEYWORD_Q_E, input.matched.chop.to_sym)
-  when input.scan(/[A-Z]\w*:/)
-    new_token(:tUKEYWORD, input.matched.chop.to_sym)
-  when input.scan(/[A-Z]\w*[?!]:/)
-    new_token(:tUKEYWORD_Q_E, input.matched.chop.to_sym)
-  when input.scan(/\$[A-Za-z_]\w*/)
-    new_token(:tGLOBALIDENT)
-  when input.scan(/@[a-zA-Z_]\w*/)
-    new_token(:tIVAR, input.matched.to_sym)
-  when input.scan(/@@[a-zA-Z_]\w*/)
-    new_token(:tCLASSVAR, input.matched.to_sym)
-  when input.scan(/_[A-Z]\w*\b/)
-    new_token(:tINTERFACEIDENT)
-  when input.scan(/[A-Z]\w*\b/)
-    new_token(:tUIDENT)
-  when input.scan(/[a-z]\w*\b/)
-    new_token(:tLIDENT)
-  when input.scan(/_[a-z]\w*\b/)
-    new_token(:tUNDERSCOREIDENT)
-  when input.scan(/_[\w_]*\b/)
-    new_token(:tPARAMNAME)
-  when input.scan(/"(\\"|[^"])*"/)
-    s = input.matched.yield_self {|s| s[1, s.length - 2] }
-                     .gsub(DBL_QUOTE_STR_ESCAPE_SEQUENCES_RE) do |match|
-                       case match
-                       when '\\a' then "\a"
-                       when '\\b' then "\b"
-                       when '\\e' then "\e"
-                       when '\\f' then "\f"
-                       when '\\n' then "\n"
-                       when '\\r' then "\r"
-                       when '\\s' then "\s"
-                       when '\\t' then "\t"
-                       when '\\v' then "\v"
-                       when '\\"' then '"'
-                       end
-                     end
-    new_token(:tSTRING, s)
-  when input.scan(/'(\\'|[^'])*'/)
-    s = input.matched.yield_self {|s| s[1, s.length - 2] }.gsub(/\\'/, "'")
-    new_token(:tSTRING, s)
-  else
-    text = input.peek(10)
-    start_index = charpos(input)
-    end_index = start_index + text.length
-    location = RBS::Location.new(buffer: buffer, start_pos: start_index, end_pos: end_index)
-    raise LexerError.new(input: text, location: location)
   end
+
+  if @eof
+    pos = tokenizer.scanner.char_pos
+    return [:tEOF, "$"]
+  end
+
+  ret = tokenizer.next_token() or return
+
+  if ret[0] == :tCOMMENT
+    t = ret[1]
+    value = tokenizer.value(t)
+    start_index = tokenizer.start_pos(t)
+    end_index = tokenizer.end_pos(t) - 1
+    value.sub!(/\A# ?/, '')
+    value.chomp!
+    buffer.insert_comment value, start_index, end_index
+
+    next_token()
+  else
+    ret
+  end
+
+  # return new_token(false, '') if @eof
+
+  # while true
+  #   return new_token(false, '') if input.eos?
+  #
+  #   case
+  #   when input.skip(/\s+/)
+  #     # skip
+  #   when input.scan(/#(( *)|( ?(?<string>.*)))\n/)
+  #     charpos = charpos(input)
+  #     start_index = charpos - input.matched.size
+  #     end_index = charpos-1
+  #     buffer.insert_comment input[:string] || "", start_index, end_index
+  #   else
+  #     break
+  #   end
+  # end
+
+  # case
+  # when eof_re && input.scan(eof_re)
+  #   @eof = true
+  #   [:tEOF, input.matched]
+  # when input.scan(/`[a-zA-Z_]\w*`/)
+  #   s = input.matched.yield_self {|s| s[1, s.length-2] }
+  #   new_token(:tQUOTEDIDENT, s)
+  # when input.scan(/`(\\`|[^` :])+`/)
+  #   s = input.matched.yield_self {|s| s[1, s.length-2] }.gsub(/\\`/, '`')
+  #   new_token(:tQUOTEDMETHOD, s)
+  # when input.scan(ANNOTATION_RE)
+  #   s = input.matched.yield_self {|s| s[3, s.length-4] }.strip
+  #   new_token(:tANNOTATION, s)
+  # when input.scan(/self\?/)
+  #   new_token(:kSELFQ, "self?")
+  # when input.scan(/(([a-zA-Z]\w*)|(_\w+))=/)
+  #   new_token(:tWRITE_ATTR)
+  # when input.scan(KEYWORDS_RE)
+  #   new_token(KEYWORDS[input.matched], input.matched.to_sym)
+  # when input.scan(/:((@{,2}|\$)?\w+(\?|\!)?|[|&\/%~`^]|<=>|={2,3}|=~|[<>]{2}|[<>]=?|[-+]@?|\*{1,2}|\[\]=?|![=~]?)\b?/)
+  #   s = input.matched.yield_self {|s| s[1, s.length] }.to_sym
+  #   new_token(:tSYMBOL, s)
+  # when input.scan(/[+-]?\d[\d_]*/)
+  #   new_token(:tINTEGER, input.matched.to_i)
+  # when input.scan(PUNCTS_RE)
+  #   new_token(PUNCTS[input.matched])
+  # when input.scan(/(::)?([A-Z]\w*::)+/)
+  #   new_token(:tNAMESPACE)
+  # when input.scan(/[a-z_]\w*:/)
+  #   new_token(:tLKEYWORD, input.matched.chop.to_sym)
+  # when input.scan(/[a-z_]\w*[?!]:/)
+  #   new_token(:tLKEYWORD_Q_E, input.matched.chop.to_sym)
+  # when input.scan(/[A-Z]\w*:/)
+  #   new_token(:tUKEYWORD, input.matched.chop.to_sym)
+  # when input.scan(/[A-Z]\w*[?!]:/)
+  #   new_token(:tUKEYWORD_Q_E, input.matched.chop.to_sym)
+  # when input.scan(/\$[A-Za-z_]\w*/)
+  #   new_token(:tGLOBALIDENT)
+  # when input.scan(/@[a-zA-Z_]\w*/)
+  #   new_token(:tIVAR, input.matched.to_sym)
+  # when input.scan(/@@[a-zA-Z_]\w*/)
+  #   new_token(:tCLASSVAR, input.matched.to_sym)
+  # when input.scan(/_[A-Z]\w*\b/)
+  #   new_token(:tINTERFACEIDENT)
+  # when input.scan(/[A-Z]\w*\b/)
+  #   new_token(:tUIDENT)
+  # when input.scan(/[a-z]\w*\b/)
+  #   new_token(:tLIDENT)
+  # when input.scan(/_[a-z]\w*\b/)
+  #   new_token(:tUNDERSCOREIDENT)
+  # when input.scan(/_[\w_]*\b/)
+  #   new_token(:tPARAMNAME)
+  # when input.scan(/"(\\"|[^"])*"/)
+  #   s = input.matched.yield_self {|s| s[1, s.length - 2] }
+  #                    .gsub(DBL_QUOTE_STR_ESCAPE_SEQUENCES_RE) do |match|
+  #                      case match
+  #                      when '\\a' then "\a"
+  #                      when '\\b' then "\b"
+  #                      when '\\e' then "\e"
+  #                      when '\\f' then "\f"
+  #                      when '\\n' then "\n"
+  #                      when '\\r' then "\r"
+  #                      when '\\s' then "\s"
+  #                      when '\\t' then "\t"
+  #                      when '\\v' then "\v"
+  #                      when '\\"' then '"'
+  #                      end
+  #                    end
+  #   new_token(:tSTRING, s)
+  # when input.scan(/'(\\'|[^'])*'/)
+  #   s = input.matched.yield_self {|s| s[1, s.length - 2] }.gsub(/\\'/, "'")
+  #   new_token(:tSTRING, s)
+  # else
+  # end
 end
 
 def on_error(token_id, error_value, value_stack)
-  raise SyntaxError.new(token_str: token_to_str(token_id), error_value: error_value, value_stack: value_stack)
+  raise SyntaxError.new(
+    token_str: token_to_str(token_id),
+    error_value:
+      case
+      when error_value == "$"
+        # EOF??
+        pos = tokenizer.scanner.charpos
+        LocatedValue.new(value: "$", buffer: buffer, range: pos-1...pos)
+      when tokenizer.semantic_value?(error_value)
+        LocatedValue.new(value: tokenizer.value(error_value), location: location(token: error_value))
+      else
+        error_value
+      end,
+    value_stack: value_stack
+  )
 end
 
 def split_kw_loc(loc)
@@ -395,7 +565,7 @@ class SyntaxError < ParsingError
     @error_value = error_value
     @value_stack = value_stack
 
-    super "parse error on value: #{error_value.inspect} (#{token_str})"
+    super "parse error on value: #{error_value.inspect} (`#{token_str}`)"
   end
 end
 
@@ -434,72 +604,72 @@ racc_action_table = [
     41,    32,   186,    40,    41,   229,    32,    49,    40,    41,
    293,    49,    40,    41,   176,   284,    32,   194,    40,    41,
     32,   194,    32,    32,    32,   194,    32,    32,    32,   196,
-   194,   351,   352,   196,   194,   353,    42,   196,   334,    53,
-   194,   338,   196,    53,   209,   407,   196,   350,   209,   336,
-    40,    41,   196,   406,    55,    56,    57,    58,    59,    60,
-    61,    62,   355,   186,    63,    54,    64,    65,    66,    77,
-    67,    68,    69,    83,    40,    41,    53,   346,   340,   341,
-    53,   366,   344,   342,   345,   126,     2,     3,     4,   343,
-    82,    70,    71,    72,    74,    76,    75,   339,   348,   349,
-    73,    78,    80,    39,   398,   410,   186,    84,    85,    81,
-    86,   351,   352,    40,    41,   353,   180,    43,   411,    -4,
-    48,  -244,   104,   264,    33,    39,   117,   350,  -244,   186,
+   194,   352,   353,   196,   194,   354,    42,   196,   334,    53,
+   194,   338,   196,    53,   209,   408,   196,   343,   209,   336,
+    40,    41,   196,   407,    55,    56,    57,    58,    59,    60,
+    61,    62,   356,   186,    63,    54,    64,    65,    66,    77,
+    67,    68,    69,    83,    40,    41,    53,   351,   345,   346,
+    53,   367,   349,   347,   350,   126,     2,     3,     4,   348,
+    82,    70,    71,    72,    74,    76,    75,   344,   341,   342,
+    73,    78,    80,    39,   399,   411,   186,    84,    85,    81,
+    86,   352,   353,    40,    41,   354,   180,    43,   412,    -4,
+    48,  -245,   104,   264,    33,    39,   117,   343,  -245,   186,
    186,    40,    41,   113,    55,    56,    57,    58,    59,    60,
     61,    62,    79,   186,    63,    54,    64,    65,    66,    77,
-    67,    68,    69,    83,    40,    41,   120,   346,   340,   341,
-    40,    41,   344,   342,   345,    32,    40,    41,   125,   343,
-    82,    70,    71,    72,    74,    76,    75,   339,   348,   349,
+    67,    68,    69,    83,    40,    41,   120,   351,   345,   346,
+    40,    41,   349,   347,   350,    32,    40,    41,   125,   348,
+    82,    70,    71,    72,    74,    76,    75,   344,   341,   342,
     73,    78,    80,    40,    41,    40,    41,    84,    85,    81,
-    86,   351,   352,    40,    41,   353,    39,    96,    97,    98,
-    99,   101,   102,    40,    41,   103,   165,   350,    40,    41,
+    86,   352,   353,    40,    41,   354,    39,    96,    97,    98,
+    99,   101,   102,    40,    41,   103,   165,   343,    40,    41,
     40,    41,    40,    41,    55,    56,    57,    58,    59,    60,
     61,    62,    79,   166,    63,    54,    64,    65,    66,    77,
-    67,    68,    69,    83,    40,    41,   167,   346,   340,   341,
-   286,   287,   344,   342,   345,   369,   370,    40,    41,   343,
-    82,    70,    71,    72,    74,    76,    75,   339,   348,   349,
-    73,    78,    80,    40,    41,   385,   386,    84,    85,    81,
-    86,   351,   352,    40,    41,   353,   168,    96,    97,    98,
-    99,    40,    41,    40,    41,    40,    41,   350,    40,    41,
+    67,    68,    69,    83,    40,    41,   167,   351,   345,   346,
+   286,   287,   349,   347,   350,   370,   371,    40,    41,   348,
+    82,    70,    71,    72,    74,    76,    75,   344,   341,   342,
+    73,    78,    80,    40,    41,   386,   387,    84,    85,    81,
+    86,   352,   353,    40,    41,   354,   168,    96,    97,    98,
+    99,    40,    41,    40,    41,    40,    41,   343,    40,    41,
     40,    41,    40,    41,    55,    56,    57,    58,    59,    60,
     61,    62,    79,   170,    63,    54,    64,    65,    66,    77,
-    67,    68,    69,    83,   171,   172,   113,   346,   340,   341,
-   178,   181,   344,   342,   345,   184,    41,   187,   189,   343,
-    82,    70,    71,    72,    74,    76,    75,   339,   348,   349,
-    73,    78,    80,   180,   190,  -104,  -105,    84,    85,    81,
-    86,   351,   352,  -106,  -107,   353,  -108,    96,    97,    98,
-    99,  -109,  -110,  -111,  -112,  -113,  -114,   350,    48,  -129,
+    67,    68,    69,    83,   171,   172,   113,   351,   345,   346,
+   178,   181,   349,   347,   350,   184,    41,   187,   189,   348,
+    82,    70,    71,    72,    74,    76,    75,   344,   341,   342,
+    73,    78,    80,   180,   190,  -105,  -106,    84,    85,    81,
+    86,   352,   353,  -107,  -108,   354,  -109,    96,    97,    98,
+    99,  -110,  -111,  -112,  -113,  -114,  -115,   343,    48,  -130,
    197,   198,   199,   200,    55,    56,    57,    58,    59,    60,
     61,    62,    79,   201,    63,    54,    64,    65,    66,    77,
-    67,    68,    69,    83,   202,   210,   211,   346,   340,   341,
-    42,   212,   344,   342,   345,   230,   244,   253,   254,   343,
-    82,    70,    71,    72,    74,    76,    75,   339,   348,   349,
+    67,    68,    69,    83,   202,   210,   211,   351,   345,   346,
+    42,   212,   349,   347,   350,   230,   244,   253,   254,   348,
+    82,    70,    71,    72,    74,    76,    75,   344,   341,   342,
     73,    78,    80,   255,   257,   259,   260,    84,    85,    81,
-    86,   351,   352,    42,   262,   353,   262,   262,   266,    42,
-   230,   270,   274,   276,   291,   292,   315,   350,   274,   317,
+    86,   352,   353,    42,   262,   354,   262,   262,   266,    42,
+   230,   270,   274,   276,   291,   292,   315,   343,   274,   317,
    291,   330,   331,   332,    55,    56,    57,    58,    59,    60,
-    61,    62,    79,   357,    63,    54,    64,    65,    66,    77,
-    67,    68,    69,    83,   357,   357,   365,   346,   340,   341,
-   367,   368,   344,   342,   345,   371,   373,   380,   381,   343,
-    82,    70,    71,    72,    74,    76,    75,   339,   348,   349,
-    73,    78,    80,   382,   390,   390,   390,    84,    85,    81,
-    86,   351,   352,   402,   403,   353,   404,    96,    97,    98,
-    99,   405,   408,   409,   414,   415,   416,   350,   418,   421,
-   414,   nil,   nil,   nil,    55,    56,    57,    58,    59,    60,
+    61,    62,    79,   358,    63,    54,    64,    65,    66,    77,
+    67,    68,    69,    83,   358,   358,   366,   351,   345,   346,
+   368,   369,   349,   347,   350,   372,   374,   381,   382,   348,
+    82,    70,    71,    72,    74,    76,    75,   344,   341,   342,
+    73,    78,    80,   383,   391,   391,   391,    84,    85,    81,
+    86,   352,   353,   403,   404,   354,   405,    96,    97,    98,
+    99,   406,   409,   410,   415,   416,   417,   343,   419,   422,
+   415,   nil,   nil,   nil,    55,    56,    57,    58,    59,    60,
     61,    62,    79,   nil,    63,    54,    64,    65,    66,    77,
-    67,    68,    69,    83,   nil,   nil,   nil,   346,   340,   341,
-   nil,   nil,   344,   342,   345,   nil,   nil,   nil,   nil,   343,
-    82,    70,    71,    72,    74,    76,    75,   339,   348,   349,
+    67,    68,    69,    83,   nil,   nil,   nil,   351,   345,   346,
+   nil,   nil,   349,   347,   350,   nil,   nil,   nil,   nil,   348,
+    82,    70,    71,    72,    74,    76,    75,   344,   341,   342,
     73,    78,    80,   nil,   nil,   nil,   nil,    84,    85,    81,
-    86,   351,   352,   nil,   nil,   353,   nil,   nil,   nil,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   350,   nil,   nil,
+    86,   352,   353,   nil,   nil,   354,   nil,   nil,   nil,   nil,
+   nil,   nil,   nil,   nil,   nil,   nil,   nil,   343,   nil,   nil,
    nil,   nil,   nil,   nil,    55,    56,    57,    58,    59,    60,
     61,    62,    79,   nil,    63,    54,    64,    65,    66,    77,
-    67,    68,    69,    83,   nil,   nil,   nil,   346,   340,   341,
-   nil,   nil,   344,   342,   345,   nil,   nil,   nil,   nil,   343,
-    82,    70,    71,    72,    74,    76,    75,   339,   348,   349,
+    67,    68,    69,    83,   nil,   nil,   nil,   351,   345,   346,
+   nil,   nil,   349,   347,   350,   nil,   nil,   nil,   nil,   348,
+    82,    70,    71,    72,    74,    76,    75,   344,   341,   342,
     73,    78,    80,   nil,   nil,   nil,   nil,    84,    85,    81,
     86,    33,   nil,   nil,    96,    97,    98,    99,   nil,   nil,
-   nil,    22,    23,    21,   nil,    26,  -219,    25,   nil,    30,
+   nil,    22,    23,    21,   nil,    26,  -220,    25,   nil,    30,
    nil,   131,   132,   133,   134,   135,   136,   137,   138,   142,
     16,   139,   130,   140,   141,    66,    77,    67,    68,    69,
     83,   nil,    32,   nil,   nil,   nil,    28,   nil,   156,   nil,
@@ -515,14 +685,14 @@ racc_action_table = [
     75,   nil,   nil,   nil,    73,    78,    80,   nil,   nil,   nil,
    nil,    84,    85,    81,    86,    33,   nil,   nil,    96,    97,
     98,    99,   nil,   nil,   nil,    22,    23,    21,   nil,    26,
-  -219,    25,   nil,    30,   nil,   131,   132,   133,   134,   135,
+  -220,    25,   nil,    30,   nil,   131,   132,   133,   134,   135,
    136,   137,   138,   142,    16,   139,   130,   140,   141,    66,
     77,    67,    68,    69,    83,   nil,    32,   nil,   nil,   nil,
     28,   nil,   156,   nil,   157,   159,   nil,   nil,   nil,   nil,
    nil,    82,    70,    71,    72,    74,    76,    75,   nil,   nil,
    nil,    73,    78,    80,   nil,   nil,   nil,   nil,    84,    85,
     81,    86,    33,   nil,   nil,    96,    97,    98,    99,   nil,
-   nil,   nil,    22,    23,    21,   nil,    26,  -219,    25,   nil,
+   nil,   nil,    22,    23,    21,   nil,    26,  -220,    25,   nil,
     30,   nil,   131,   132,   133,   134,   135,   136,   137,   138,
    142,    16,   139,   130,   140,   141,    66,    77,    67,    68,
     69,    83,   nil,    32,   nil,   nil,   nil,    28,   nil,   156,
@@ -530,7 +700,7 @@ racc_action_table = [
     71,    72,    74,    76,    75,   nil,   nil,   nil,    73,    78,
     80,   nil,   nil,   nil,   nil,    84,    85,    81,    86,    33,
    nil,   nil,    96,    97,    98,    99,   nil,   nil,   nil,    22,
-    23,    21,   nil,    26,  -219,    25,   nil,    30,   nil,   131,
+    23,    21,   nil,    26,  -220,    25,   nil,    30,   nil,   131,
    132,   133,   134,   135,   136,   137,   138,   142,    16,   139,
    130,   140,   141,    66,    77,    67,    68,    69,    83,   nil,
     32,   nil,   nil,   nil,    28,   nil,   236,   nil,   nil,   159,
@@ -538,14 +708,14 @@ racc_action_table = [
     76,    75,   nil,   nil,   nil,    73,    78,    80,   nil,   nil,
    nil,   nil,    84,    85,    81,    86,    33,   nil,   nil,    96,
     97,    98,    99,   nil,   nil,   nil,    22,    23,    21,   nil,
-    26,  -219,    25,   nil,    30,   nil,   131,   132,   133,   134,
+    26,  -220,    25,   nil,    30,   nil,   131,   132,   133,   134,
    135,   136,   137,   138,   142,    16,   139,   130,   140,   141,
     66,    77,    67,    68,    69,    83,   nil,    32,   nil,   nil,
    nil,    28,   nil,   156,   nil,   157,   159,   nil,   nil,   nil,
    nil,   nil,    82,    70,    71,    72,    74,    76,    75,   nil,
    nil,   nil,    73,    78,    80,   nil,   nil,   nil,   nil,    84,
     85,    81,    86,    33,   nil,   nil,    96,    97,    98,    99,
-   nil,   nil,   nil,    22,    23,    21,   nil,    26,  -219,    25,
+   nil,   nil,   nil,    22,    23,    21,   nil,    26,  -220,    25,
    nil,    30,   nil,   131,   132,   133,   134,   135,   136,   137,
    138,   142,    16,   139,   130,   140,   141,    66,    77,    67,
     68,    69,    83,   nil,    32,   nil,   nil,   nil,    28,   nil,
@@ -582,14 +752,14 @@ racc_action_table = [
     78,    80,    96,    97,    98,    99,    84,    85,    81,    86,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,    55,
     56,    57,    58,    59,    60,    61,    62,    79,   nil,    63,
-    54,    64,    65,    66,    77,    67,    68,    69,    83,  -244,
-   nil,   nil,    33,   nil,   117,   nil,  -244,   nil,   nil,   312,
+    54,    64,    65,    66,    77,    67,    68,    69,    83,  -245,
+   nil,   nil,    33,   nil,   117,   nil,  -245,   nil,   nil,   312,
    313,   113,   nil,   nil,   nil,    82,    70,    71,    72,    74,
     76,    75,   nil,   nil,   nil,    73,    78,    80,   nil,   nil,
    314,   nil,    84,    85,    81,    86,   nil,   nil,   nil,   309,
-   308,  -244,   nil,    32,    33,   nil,   117,   nil,  -244,   nil,
-   nil,   312,   313,   113,   nil,  -244,   nil,   nil,    33,   300,
-   117,   nil,  -244,   nil,   nil,   312,   313,   113,   nil,   nil,
+   308,  -245,   nil,    32,    33,   nil,   117,   nil,  -245,   nil,
+   nil,   312,   313,   113,   nil,  -245,   nil,   nil,    33,   300,
+   117,   nil,  -245,   nil,   nil,   312,   313,   113,   nil,   nil,
    nil,   nil,   314,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
    nil,   309,   308,   nil,   nil,    32,   314,   nil,   nil,   nil,
    nil,   nil,   nil,   nil,   nil,   309,   308,   nil,    33,    32,
@@ -623,7 +793,7 @@ racc_action_table = [
      8,    12,    19,    20,     9,    10,    13,    14,    15,    16,
     17,    18,    11,    27,   nil,   nil,    33,   nil,   nil,   nil,
    nil,    32,   nil,   nil,   nil,    28,    22,    23,    21,   nil,
-    26,   nil,    25,  -248,    30,   nil,     8,    12,    19,    20,
+    26,   nil,    25,  -249,    30,   nil,     8,    12,    19,    20,
      9,    10,    13,    14,    15,    16,    17,    18,    11,    27,
    nil,   nil,    33,   nil,   nil,   nil,   nil,    32,   nil,   nil,
    nil,    28,    22,    23,    21,   nil,    26,   nil,    25,   nil,
@@ -752,70 +922,70 @@ racc_action_check = [
    280,   119,   207,   207,   114,   271,   222,   143,   240,   240,
    264,   203,   270,   276,   291,   205,   322,   328,   329,   143,
    206,   324,   324,   203,   207,   324,     7,   205,   321,    28,
-   240,   323,   206,   119,   160,   390,   207,   324,   210,   323,
-    44,    44,   240,   390,   324,   324,   324,   324,   324,   324,
+   240,   323,   206,   119,   160,   391,   207,   324,   210,   323,
+    44,    44,   240,   391,   324,   324,   324,   324,   324,   324,
    324,   324,   324,   321,   324,   324,   324,   324,   324,   324,
    324,   324,   324,   324,     6,     6,   160,   324,   324,   324,
    210,   333,   324,   324,   324,    47,     0,     0,     0,   324,
    324,   324,   324,   324,   324,   324,   324,   324,   324,   324,
-   324,   324,   324,     6,   383,   395,   333,   324,   324,   324,
-   324,   356,   356,    47,    47,   356,   250,    24,   396,    34,
-    27,    34,    32,   250,    34,    35,    34,   356,    34,   383,
-   395,   169,   169,    34,   356,   356,   356,   356,   356,   356,
-   356,   356,   356,   396,   356,   356,   356,   356,   356,   356,
-   356,   356,   356,   356,   188,   188,    36,   356,   356,   356,
-   214,   214,   356,   356,   356,    34,   215,   215,    46,   356,
-   356,   356,   356,   356,   356,   356,   356,   356,   356,   356,
-   356,   356,   356,   216,   216,   217,   217,   356,   356,   356,
-   356,   358,   358,   218,   218,   358,    34,   358,   358,   358,
-   358,    31,    31,   219,   219,    31,    87,   358,   225,   225,
-   226,   226,   227,   227,   358,   358,   358,   358,   358,   358,
-   358,   358,   358,    89,   358,   358,   358,   358,   358,   358,
-   358,   358,   358,   358,   267,   267,    90,   358,   358,   358,
-   273,   273,   358,   358,   358,   347,   347,   363,   363,   358,
-   358,   358,   358,   358,   358,   358,   358,   358,   358,   358,
-   358,   358,   358,   364,   364,   368,   368,   358,   358,   358,
-   358,   359,   359,   388,   388,   359,    91,   359,   359,   359,
-   359,   391,   391,   393,   393,   397,   397,   359,   417,   417,
-   419,   419,   420,   420,   359,   359,   359,   359,   359,   359,
-   359,   359,   359,    93,   359,   359,   359,   359,   359,   359,
-   359,   359,   359,   359,    94,    95,   113,   359,   359,   359,
-   115,   117,   359,   359,   359,   120,   121,   124,   127,   359,
+   324,   324,   324,     6,   384,   396,   333,   324,   324,   324,
+   324,   357,   357,    47,    47,   357,   250,    24,   397,    34,
+    27,    34,    32,   250,    34,    35,    34,   357,    34,   384,
+   396,   169,   169,    34,   357,   357,   357,   357,   357,   357,
+   357,   357,   357,   397,   357,   357,   357,   357,   357,   357,
+   357,   357,   357,   357,   188,   188,    36,   357,   357,   357,
+   214,   214,   357,   357,   357,    34,   215,   215,    46,   357,
+   357,   357,   357,   357,   357,   357,   357,   357,   357,   357,
+   357,   357,   357,   216,   216,   217,   217,   357,   357,   357,
+   357,   359,   359,   218,   218,   359,    34,   359,   359,   359,
+   359,    31,    31,   219,   219,    31,    87,   359,   225,   225,
+   226,   226,   227,   227,   359,   359,   359,   359,   359,   359,
+   359,   359,   359,    89,   359,   359,   359,   359,   359,   359,
+   359,   359,   359,   359,   267,   267,    90,   359,   359,   359,
+   273,   273,   359,   359,   359,   340,   340,   364,   364,   359,
    359,   359,   359,   359,   359,   359,   359,   359,   359,   359,
-   359,   359,   359,   128,   129,   130,   131,   359,   359,   359,
-   359,   360,   360,   132,   133,   360,   134,   360,   360,   360,
-   360,   135,   136,   137,   138,   139,   140,   360,   141,   142,
-   145,   146,   148,   150,   360,   360,   360,   360,   360,   360,
-   360,   360,   360,   153,   360,   360,   360,   360,   360,   360,
-   360,   360,   360,   360,   154,   161,   162,   360,   360,   360,
-   163,   164,   360,   360,   360,   190,   208,   223,   224,   360,
+   359,   359,   359,   365,   365,   369,   369,   359,   359,   359,
+   359,   360,   360,   389,   389,   360,    91,   360,   360,   360,
+   360,   392,   392,   394,   394,   398,   398,   360,   418,   418,
+   420,   420,   421,   421,   360,   360,   360,   360,   360,   360,
+   360,   360,   360,    93,   360,   360,   360,   360,   360,   360,
+   360,   360,   360,   360,    94,    95,   113,   360,   360,   360,
+   115,   117,   360,   360,   360,   120,   121,   124,   127,   360,
    360,   360,   360,   360,   360,   360,   360,   360,   360,   360,
-   360,   360,   360,   229,   234,   245,   246,   360,   360,   360,
-   360,   371,   371,   247,   248,   371,   249,   251,   252,   256,
-   259,   261,   262,   263,   277,   279,   282,   371,   284,   285,
-   289,   312,   313,   314,   371,   371,   371,   371,   371,   371,
-   371,   371,   371,   325,   371,   371,   371,   371,   371,   371,
-   371,   371,   371,   371,   326,   327,   332,   371,   371,   371,
-   335,   337,   371,   371,   371,   355,   357,   361,   362,   371,
-   371,   371,   371,   371,   371,   371,   371,   371,   371,   371,
-   371,   371,   371,   365,   375,   377,   379,   371,   371,   371,
-   371,   384,   384,   385,   386,   384,   387,   384,   384,   384,
-   384,   389,   392,   394,   399,   401,   404,   384,   407,   413,
-   421,   nil,   nil,   nil,   384,   384,   384,   384,   384,   384,
-   384,   384,   384,   nil,   384,   384,   384,   384,   384,   384,
-   384,   384,   384,   384,   nil,   nil,   nil,   384,   384,   384,
-   nil,   nil,   384,   384,   384,   nil,   nil,   nil,   nil,   384,
-   384,   384,   384,   384,   384,   384,   384,   384,   384,   384,
-   384,   384,   384,   nil,   nil,   nil,   nil,   384,   384,   384,
-   384,   416,   416,   nil,   nil,   416,   nil,   nil,   nil,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   416,   nil,   nil,
-   nil,   nil,   nil,   nil,   416,   416,   416,   416,   416,   416,
-   416,   416,   416,   nil,   416,   416,   416,   416,   416,   416,
-   416,   416,   416,   416,   nil,   nil,   nil,   416,   416,   416,
-   nil,   nil,   416,   416,   416,   nil,   nil,   nil,   nil,   416,
-   416,   416,   416,   416,   416,   416,   416,   416,   416,   416,
-   416,   416,   416,   nil,   nil,   nil,   nil,   416,   416,   416,
-   416,    49,   nil,   nil,    49,    49,    49,    49,   nil,   nil,
+   360,   360,   360,   128,   129,   130,   131,   360,   360,   360,
+   360,   361,   361,   132,   133,   361,   134,   361,   361,   361,
+   361,   135,   136,   137,   138,   139,   140,   361,   141,   142,
+   145,   146,   148,   150,   361,   361,   361,   361,   361,   361,
+   361,   361,   361,   153,   361,   361,   361,   361,   361,   361,
+   361,   361,   361,   361,   154,   161,   162,   361,   361,   361,
+   163,   164,   361,   361,   361,   190,   208,   223,   224,   361,
+   361,   361,   361,   361,   361,   361,   361,   361,   361,   361,
+   361,   361,   361,   229,   234,   245,   246,   361,   361,   361,
+   361,   372,   372,   247,   248,   372,   249,   251,   252,   256,
+   259,   261,   262,   263,   277,   279,   282,   372,   284,   285,
+   289,   312,   313,   314,   372,   372,   372,   372,   372,   372,
+   372,   372,   372,   325,   372,   372,   372,   372,   372,   372,
+   372,   372,   372,   372,   326,   327,   332,   372,   372,   372,
+   335,   337,   372,   372,   372,   356,   358,   362,   363,   372,
+   372,   372,   372,   372,   372,   372,   372,   372,   372,   372,
+   372,   372,   372,   366,   376,   378,   380,   372,   372,   372,
+   372,   385,   385,   386,   387,   385,   388,   385,   385,   385,
+   385,   390,   393,   395,   400,   402,   405,   385,   408,   414,
+   422,   nil,   nil,   nil,   385,   385,   385,   385,   385,   385,
+   385,   385,   385,   nil,   385,   385,   385,   385,   385,   385,
+   385,   385,   385,   385,   nil,   nil,   nil,   385,   385,   385,
+   nil,   nil,   385,   385,   385,   nil,   nil,   nil,   nil,   385,
+   385,   385,   385,   385,   385,   385,   385,   385,   385,   385,
+   385,   385,   385,   nil,   nil,   nil,   nil,   385,   385,   385,
+   385,   417,   417,   nil,   nil,   417,   nil,   nil,   nil,   nil,
+   nil,   nil,   nil,   nil,   nil,   nil,   nil,   417,   nil,   nil,
+   nil,   nil,   nil,   nil,   417,   417,   417,   417,   417,   417,
+   417,   417,   417,   nil,   417,   417,   417,   417,   417,   417,
+   417,   417,   417,   417,   nil,   nil,   nil,   417,   417,   417,
+   nil,   nil,   417,   417,   417,   nil,   nil,   nil,   nil,   417,
+   417,   417,   417,   417,   417,   417,   417,   417,   417,   417,
+   417,   417,   417,   nil,   nil,   nil,   nil,   417,   417,   417,
+   417,    49,   nil,   nil,    49,    49,    49,    49,   nil,   nil,
    nil,    49,    49,    49,   nil,    49,    49,    49,   nil,    49,
    nil,    49,    49,    49,    49,    49,    49,    49,    49,    49,
     49,    49,    49,    49,    49,    49,    49,    49,    49,    49,
@@ -1017,44 +1187,44 @@ racc_action_check = [
    nil,   nil,   331,   nil,   nil,   nil,   nil,   330,   nil,   nil,
    nil,   330,   331,   331,   331,   nil,   331,   nil,   331,   nil,
    331,   nil,   331,   331,   331,   331,   331,   331,   331,   331,
-   331,   331,   331,   331,   331,   331,   nil,   nil,   367,   nil,
-   nil,   nil,   nil,   331,   nil,   nil,   nil,   331,   367,   367,
-   367,   nil,   367,   nil,   367,   nil,   367,   nil,   367,   367,
-   367,   367,   367,   367,   367,   367,   367,   367,   367,   367,
-   367,   367,   nil,   nil,   374,   nil,   nil,   nil,   nil,   367,
-   nil,   nil,   nil,   367,   374,   374,   374,   nil,   374,   nil,
-   374,   nil,   374,   nil,   374,   374,   374,   374,   374,   374,
-   374,   374,   374,   374,   374,   374,   374,   374,   nil,   nil,
-   376,   nil,   nil,   nil,   nil,   374,   nil,   nil,   nil,   374,
-   376,   376,   376,   nil,   376,   nil,   376,   nil,   376,   nil,
-   376,   376,   376,   376,   376,   376,   376,   376,   376,   376,
-   376,   376,   376,   376,   nil,   nil,   378,   nil,   nil,   nil,
-   nil,   376,   nil,   nil,   nil,   376,   378,   378,   378,   nil,
-   378,   nil,   378,   nil,   378,   nil,   378,   378,   378,   378,
-   378,   378,   378,   378,   378,   378,   378,   378,   378,   378,
-   nil,   nil,   380,   nil,   nil,   nil,   nil,   378,   nil,   nil,
-   nil,   378,   380,   380,   380,   nil,   380,   nil,   380,   nil,
-   380,   nil,   380,   380,   380,   380,   380,   380,   380,   380,
-   380,   380,   380,   380,   380,   380,   nil,   nil,   381,   nil,
-   nil,   nil,   nil,   380,   nil,   nil,   nil,   380,   381,   381,
-   381,   nil,   381,   nil,   381,   nil,   381,   nil,   381,   381,
-   381,   381,   381,   381,   381,   381,   381,   381,   381,   381,
-   381,   381,   nil,   nil,   382,   nil,   nil,   nil,   nil,   381,
-   nil,   nil,   nil,   381,   382,   382,   382,   nil,   382,   nil,
-   382,   nil,   382,   nil,   382,   382,   382,   382,   382,   382,
-   382,   382,   382,   382,   382,   382,   382,   382,   nil,   nil,
-   405,   nil,   nil,   nil,   nil,   382,   nil,   nil,   nil,   382,
-   405,   405,   405,   nil,   405,   nil,   405,   nil,   405,   nil,
-   405,   405,   405,   405,   405,   405,   405,   405,   405,   405,
-   405,   405,   405,   405,   nil,   nil,   408,   nil,   nil,   nil,
-   nil,   405,   nil,   nil,   nil,   405,   408,   408,   408,   nil,
-   408,   nil,   408,   nil,   408,   nil,   408,   408,   408,   408,
-   408,   408,   408,   408,   408,   408,   408,   408,   408,   408,
-   nil,   nil,   409,   nil,   nil,   nil,   nil,   408,   nil,   nil,
-   nil,   408,   409,   409,   409,   nil,   409,   nil,   409,   nil,
-   409,   nil,   409,   409,   409,   409,   409,   409,   409,   409,
-   409,   409,   409,   409,   409,   409,   299,   nil,   nil,   299,
-   nil,   299,   nil,   409,   299,   nil,   nil,   409,   nil,   nil,
+   331,   331,   331,   331,   331,   331,   nil,   nil,   368,   nil,
+   nil,   nil,   nil,   331,   nil,   nil,   nil,   331,   368,   368,
+   368,   nil,   368,   nil,   368,   nil,   368,   nil,   368,   368,
+   368,   368,   368,   368,   368,   368,   368,   368,   368,   368,
+   368,   368,   nil,   nil,   375,   nil,   nil,   nil,   nil,   368,
+   nil,   nil,   nil,   368,   375,   375,   375,   nil,   375,   nil,
+   375,   nil,   375,   nil,   375,   375,   375,   375,   375,   375,
+   375,   375,   375,   375,   375,   375,   375,   375,   nil,   nil,
+   377,   nil,   nil,   nil,   nil,   375,   nil,   nil,   nil,   375,
+   377,   377,   377,   nil,   377,   nil,   377,   nil,   377,   nil,
+   377,   377,   377,   377,   377,   377,   377,   377,   377,   377,
+   377,   377,   377,   377,   nil,   nil,   379,   nil,   nil,   nil,
+   nil,   377,   nil,   nil,   nil,   377,   379,   379,   379,   nil,
+   379,   nil,   379,   nil,   379,   nil,   379,   379,   379,   379,
+   379,   379,   379,   379,   379,   379,   379,   379,   379,   379,
+   nil,   nil,   381,   nil,   nil,   nil,   nil,   379,   nil,   nil,
+   nil,   379,   381,   381,   381,   nil,   381,   nil,   381,   nil,
+   381,   nil,   381,   381,   381,   381,   381,   381,   381,   381,
+   381,   381,   381,   381,   381,   381,   nil,   nil,   382,   nil,
+   nil,   nil,   nil,   381,   nil,   nil,   nil,   381,   382,   382,
+   382,   nil,   382,   nil,   382,   nil,   382,   nil,   382,   382,
+   382,   382,   382,   382,   382,   382,   382,   382,   382,   382,
+   382,   382,   nil,   nil,   383,   nil,   nil,   nil,   nil,   382,
+   nil,   nil,   nil,   382,   383,   383,   383,   nil,   383,   nil,
+   383,   nil,   383,   nil,   383,   383,   383,   383,   383,   383,
+   383,   383,   383,   383,   383,   383,   383,   383,   nil,   nil,
+   406,   nil,   nil,   nil,   nil,   383,   nil,   nil,   nil,   383,
+   406,   406,   406,   nil,   406,   nil,   406,   nil,   406,   nil,
+   406,   406,   406,   406,   406,   406,   406,   406,   406,   406,
+   406,   406,   406,   406,   nil,   nil,   409,   nil,   nil,   nil,
+   nil,   406,   nil,   nil,   nil,   406,   409,   409,   409,   nil,
+   409,   nil,   409,   nil,   409,   nil,   409,   409,   409,   409,
+   409,   409,   409,   409,   409,   409,   409,   409,   409,   409,
+   nil,   nil,   410,   nil,   nil,   nil,   nil,   409,   nil,   nil,
+   nil,   409,   410,   410,   410,   nil,   410,   nil,   410,   nil,
+   410,   nil,   410,   410,   410,   410,   410,   410,   410,   410,
+   410,   410,   410,   410,   410,   410,   299,   nil,   nil,   299,
+   nil,   299,   nil,   410,   299,   nil,   nil,   410,   nil,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
    nil,   299,   nil,   299,   299,   299,   299,   299,   nil,   nil,
    nil,   299 ]
@@ -1094,77 +1264,77 @@ racc_action_pointer = [
    nil,   nil,   456,   457,   445,  2635,   nil,   nil,   nil,   nil,
    nil,    66,    30,    18,    79,   480,   491,   492,    31,    32,
   2671,  2707,   514,   109,   nil,   509,   nil,   491,   nil,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   243,   nil,   nil,
-   nil,   nil,   nil,   nil,   nil,   477,   159,   478,   239,   319,
-   399,   516,   517,   249,   265,   508,   nil,  2743,   282,   nil,
-   nil,   479,   nil,   nil,  2779,   535,  2815,   536,  2851,   537,
-  2887,  2923,  2959,   132,   559,   505,   506,   533,   275,   526,
-    83,   283,   527,   285,   528,   133,   146,   287,   nil,   515,
-   nil,   530,   nil,   nil,   518,  2995,   nil,   558,  3031,  3067,
-   nil,   nil,   nil,   531,   nil,   nil,   639,   290,   nil,   292,
-   294,   521,   nil,   nil ]
+   243,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
+   nil,   nil,   nil,   nil,   nil,   nil,   477,   159,   478,   239,
+   319,   399,   516,   517,   249,   265,   508,   nil,  2743,   282,
+   nil,   nil,   479,   nil,   nil,  2779,   535,  2815,   536,  2851,
+   537,  2887,  2923,  2959,   132,   559,   505,   506,   533,   275,
+   526,    83,   283,   527,   285,   528,   133,   146,   287,   nil,
+   515,   nil,   530,   nil,   nil,   518,  2995,   nil,   558,  3031,
+  3067,   nil,   nil,   nil,   531,   nil,   nil,   639,   290,   nil,
+   292,   294,   521,   nil,   nil ]
 
 racc_action_default = [
-  -250,  -250,  -244,    -6,   -15,  -250,    -4,  -157,  -160,  -161,
-  -162,  -163,  -164,  -165,  -166,  -167,  -168,  -169,  -170,  -171,
-  -172,  -173,  -174,  -175,  -176,  -244,  -244,  -250,   -80,  -184,
-  -250,  -250,  -245,  -247,   -16,    -4,  -147,   424,    -1,    -5,
-  -244,  -244,  -183,  -244,  -185,  -178,  -249,  -250,  -244,  -244,
-  -182,  -250,  -204,  -244,  -104,  -105,  -106,  -107,  -108,  -109,
-  -110,  -111,  -112,  -113,  -114,  -115,  -116,  -117,  -118,  -119,
-  -120,  -121,  -122,  -123,  -124,  -125,  -126,  -127,  -128,  -129,
-  -130,  -131,  -132,  -133,  -134,  -135,  -136,  -249,  -188,  -250,
-  -250,  -250,  -244,  -250,  -250,  -250,  -199,  -200,  -201,  -202,
-  -237,  -238,  -239,  -240,  -246,    -2,    -7,    -8,    -9,   -10,
-   -11,   -12,   -13,   -16,  -250,  -250,  -250,  -250,    -3,   -80,
-  -250,  -158,  -159,  -250,  -250,  -244,  -180,  -250,  -250,  -250,
-  -170,  -160,  -164,  -171,  -172,  -161,  -162,  -165,  -166,  -169,
-  -163,  -115,  -167,  -231,  -197,  -250,  -208,  -209,  -211,  -212,
-  -214,  -215,  -218,  -221,  -223,  -224,  -244,  -244,  -244,  -244,
-  -250,  -250,  -250,  -206,  -250,  -248,  -244,  -244,  -244,  -193,
-  -244,  -244,  -244,   -17,   -14,   -14,   -14,  -244,  -244,  -244,
-  -242,  -244,   -79,  -250,  -149,  -177,  -244,  -179,  -186,  -181,
-   -81,  -225,  -232,  -233,  -234,  -235,  -236,  -198,  -244,  -244,
-  -244,  -219,  -219,  -231,  -244,  -231,  -231,  -231,  -250,  -244,
-  -250,  -244,  -187,  -189,  -190,  -191,  -192,  -194,  -195,  -196,
-  -244,  -244,  -244,  -250,  -250,  -154,  -155,  -156,  -148,  -250,
-  -244,  -207,  -215,  -210,  -217,  -213,  -250,  -220,  -222,  -226,
-  -231,  -227,  -228,  -230,   -82,  -250,  -250,  -203,  -137,  -137,
-  -250,  -137,  -250,  -244,  -243,  -150,  -205,  -244,  -229,  -250,
-   -83,   -19,  -145,   -24,  -244,   -57,  -241,  -153,  -216,   -30,
-  -244,  -250,  -139,  -142,  -146,   -30,  -244,   -30,   -26,   -29,
-   -16,   -16,   -20,  -138,  -145,  -250,  -143,  -144,   -16,   -25,
-   -16,  -244,  -244,   -56,   -58,   -59,   -60,   -61,   -71,   -71,
+  -251,  -251,  -245,    -6,   -15,  -251,    -4,  -158,  -161,  -162,
+  -163,  -164,  -165,  -166,  -167,  -168,  -169,  -170,  -171,  -172,
+  -173,  -174,  -175,  -176,  -177,  -245,  -245,  -251,   -80,  -185,
+  -251,  -251,  -246,  -248,   -16,    -4,  -148,   425,    -1,    -5,
+  -245,  -245,  -184,  -245,  -186,  -179,  -250,  -251,  -245,  -245,
+  -183,  -251,  -205,  -245,  -105,  -106,  -107,  -108,  -109,  -110,
+  -111,  -112,  -113,  -114,  -115,  -116,  -117,  -118,  -119,  -120,
+  -121,  -122,  -123,  -124,  -125,  -126,  -127,  -128,  -129,  -130,
+  -131,  -132,  -133,  -134,  -135,  -136,  -137,  -250,  -189,  -251,
+  -251,  -251,  -245,  -251,  -251,  -251,  -200,  -201,  -202,  -203,
+  -238,  -239,  -240,  -241,  -247,    -2,    -7,    -8,    -9,   -10,
+   -11,   -12,   -13,   -16,  -251,  -251,  -251,  -251,    -3,   -80,
+  -251,  -159,  -160,  -251,  -251,  -245,  -181,  -251,  -251,  -251,
+  -171,  -161,  -165,  -172,  -173,  -162,  -163,  -166,  -167,  -170,
+  -164,  -116,  -168,  -232,  -198,  -251,  -209,  -210,  -212,  -213,
+  -215,  -216,  -219,  -222,  -224,  -225,  -245,  -245,  -245,  -245,
+  -251,  -251,  -251,  -207,  -251,  -249,  -245,  -245,  -245,  -194,
+  -245,  -245,  -245,   -17,   -14,   -14,   -14,  -245,  -245,  -245,
+  -243,  -245,   -79,  -251,  -150,  -178,  -245,  -180,  -187,  -182,
+   -81,  -226,  -233,  -234,  -235,  -236,  -237,  -199,  -245,  -245,
+  -245,  -220,  -220,  -232,  -245,  -232,  -232,  -232,  -251,  -245,
+  -251,  -245,  -188,  -190,  -191,  -192,  -193,  -195,  -196,  -197,
+  -245,  -245,  -245,  -251,  -251,  -155,  -156,  -157,  -149,  -251,
+  -245,  -208,  -216,  -211,  -218,  -214,  -251,  -221,  -223,  -227,
+  -232,  -228,  -229,  -231,   -82,  -251,  -251,  -204,  -138,  -138,
+  -251,  -138,  -251,  -245,  -244,  -151,  -206,  -245,  -230,  -251,
+   -83,   -19,  -146,   -24,  -245,   -57,  -242,  -154,  -217,   -30,
+  -245,  -251,  -140,  -143,  -147,   -30,  -245,   -30,   -26,   -29,
+   -16,   -16,   -20,  -139,  -146,  -251,  -144,  -145,   -16,   -25,
+   -16,  -245,  -245,   -56,   -58,   -59,   -60,   -61,   -71,   -71,
    -18,   -31,   -32,   -33,   -34,   -35,   -36,   -37,   -38,   -39,
-   -40,   -41,  -250,  -250,  -250,  -244,  -140,  -141,   -22,   -23,
-   -27,  -250,  -244,   -68,  -250,   -42,   -42,   -42,  -244,  -244,
-  -244,  -244,  -250,  -250,   -28,   -62,   -69,  -250,   -72,   -86,
-   -87,   -88,   -89,   -90,   -91,   -92,   -93,   -94,   -97,   -98,
-   -99,  -100,  -101,  -102,  -103,  -129,  -250,  -250,  -250,  -250,
-  -250,   -64,   -66,   -53,   -54,  -250,   -21,  -244,   -73,   -95,
-   -96,  -250,  -151,   -43,  -244,   -50,  -244,   -50,  -244,   -50,
-  -244,  -244,  -244,  -250,  -250,  -250,  -250,  -250,   -44,  -250,
-  -250,   -46,  -250,   -48,  -250,  -250,  -250,   -55,   -63,   -15,
-   -84,  -250,   -74,   -75,  -250,  -244,   -51,  -250,  -244,  -244,
-   -65,   -67,   -70,   -76,   -77,   -85,  -250,   -45,   -52,   -47,
-   -49,   -15,  -152,   -78 ]
+   -40,   -41,  -251,  -251,  -251,  -245,  -141,  -142,   -22,   -23,
+   -27,  -251,  -245,   -68,  -251,   -42,   -42,   -42,  -245,  -245,
+  -245,  -245,  -251,  -251,   -28,   -62,   -69,  -251,   -72,   -86,
+   -87,   -90,   -91,   -92,   -93,   -94,   -95,   -96,   -97,   -98,
+   -99,  -100,  -101,  -102,  -103,  -104,  -130,  -251,  -251,  -251,
+  -251,  -251,   -64,   -66,   -53,   -54,  -251,   -21,  -245,   -73,
+   -88,   -89,  -251,  -152,   -43,  -245,   -50,  -245,   -50,  -245,
+   -50,  -245,  -245,  -245,  -251,  -251,  -251,  -251,  -251,   -44,
+  -251,  -251,   -46,  -251,   -48,  -251,  -251,  -251,   -55,   -63,
+   -15,   -84,  -251,   -74,   -75,  -251,  -245,   -51,  -251,  -245,
+  -245,   -65,   -67,   -70,   -76,   -77,   -85,  -251,   -45,   -52,
+   -47,   -49,   -15,  -153,   -78 ]
 
 racc_goto_table = [
-     6,    46,   116,    88,    93,   163,   114,    92,   127,   191,
-   356,   129,    50,   204,   208,   232,   128,   235,   124,   123,
-   234,   234,   279,    38,    47,   277,   412,   281,   272,   261,
-   263,     1,   265,   288,   279,   290,    34,   289,   121,   122,
-   237,   238,   372,    35,   375,   377,   379,   143,   423,   279,
-   316,   105,   118,   106,   389,   269,   392,   387,   394,   164,
-   220,   221,   222,   275,   246,   358,   359,   360,   320,   239,
-   401,   241,   242,   243,   268,   295,   296,   297,   234,   251,
-   335,   280,   294,   337,   384,   173,   361,   362,   399,   119,
-   169,   162,   271,   204,   285,   183,   223,    87,   233,   100,
-   nil,   nil,   422,   182,   nil,   nil,   258,   nil,   nil,   nil,
+     6,   114,   116,    93,    46,   163,    88,    92,   127,   191,
+    50,   129,   204,   124,   208,   357,   128,   279,   232,   413,
+   235,   272,   123,   277,    47,   234,   234,    38,   281,   279,
+   261,   263,     1,   265,   288,   289,   290,    34,   121,   122,
+    35,   424,   106,   316,   279,   237,   238,   143,   373,   269,
+   376,   378,   380,   275,   164,   105,   118,   390,   320,   393,
+   295,   395,   296,   388,   246,   220,   221,   222,   297,   239,
+   251,   241,   242,   243,   280,   335,   402,   268,   294,   337,
+   173,   362,   363,   234,   359,   360,   361,   385,   400,   119,
+   169,   162,   204,   271,   285,   183,   223,    87,   233,   100,
+   nil,   182,   nil,   nil,   nil,   nil,   258,   nil,   423,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
    nil,   nil,   nil,   188,   nil,   nil,   nil,   nil,   nil,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   213,    93,
-   nil,   nil,    92,   nil,   nil,   224,   nil,   nil,   nil,   nil,
+   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,    93,   nil,
+   nil,   213,    92,   nil,   nil,   224,   nil,   nil,   nil,   nil,
    nil,   nil,   nil,   nil,   203,   205,   206,   207,   nil,   nil,
    231,   nil,   nil,   247,   214,   215,   216,   nil,   217,   218,
    219,   245,   nil,   nil,   nil,   nil,   225,   226,   nil,   227,
@@ -1174,86 +1344,86 @@ racc_goto_table = [
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
    282,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   128,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   116,
-   nil,   267,   298,   nil,   nil,   143,   116,   nil,   116,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   321,   nil,
+   nil,   nil,   nil,   nil,   nil,   nil,   nil,   298,   nil,   116,
+   nil,   267,   nil,   nil,   nil,   143,   116,   nil,   116,   nil,
+   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
+   nil,   321,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
+   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
+   nil,   nil,   nil,   nil,   333,   nil,   nil,   355,   nil,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
-   nil,   333,   nil,   nil,   nil,   nil,   nil,   nil,   354,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   363,   364,
-   354,   nil,   354,   354,   354,   374,   376,   378,   nil,   nil,
-   nil,   nil,   nil,   383,   nil,   354,   nil,   nil,   nil,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   395,   396,   354,   nil,
-   nil,   400,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
-   nil,   nil,   388,   nil,   391,   nil,   393,   nil,   nil,   nil,
-   397,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
-   354,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
-   nil,   nil,   nil,   417,   nil,   nil,   419,   420 ]
+   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   364,   365,
+   355,   nil,   355,   355,   355,   nil,   375,   377,   379,   nil,
+   nil,   nil,   nil,   nil,   nil,   355,   nil,   384,   nil,   nil,
+   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   355,   nil,
+   396,   397,   401,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
+   nil,   nil,   nil,   389,   nil,   392,   nil,   394,   nil,   nil,
+   nil,   398,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
+   355,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
+   nil,   nil,   nil,   nil,   418,   nil,   nil,   420,   421 ]
 
 racc_goto_check = [
-     2,    20,    22,    64,    53,    60,    15,    35,    16,    76,
-    36,    49,    47,    65,    51,    71,    22,    71,    61,    20,
-    66,    66,    25,     3,     2,    23,    45,    19,    55,    17,
-    17,     1,    17,    19,    25,    19,     4,    23,     2,     2,
-    72,    72,    36,     5,    36,    36,    36,     2,    45,    25,
-    55,     3,     3,     6,    37,    18,    37,    36,    37,    61,
-    13,    13,    13,    21,    51,    34,    34,    34,    24,    76,
-    36,    76,    76,    76,    71,    27,    28,    33,    66,    38,
-    25,    39,    40,    41,    43,    15,    25,    25,    44,    46,
-     2,    50,    54,    65,    57,    58,    59,    63,    67,    77,
-   nil,   nil,    36,    47,   nil,   nil,    76,   nil,   nil,   nil,
+     2,    15,    22,    54,    20,    61,    65,    35,    16,    77,
+    47,    49,    66,    62,    51,    36,    22,    25,    72,    45,
+    72,    56,    20,    23,     2,    67,    67,     3,    19,    25,
+    17,    17,     1,    17,    19,    23,    19,     4,     2,     2,
+     5,    45,     6,    56,    25,    73,    73,     2,    36,    18,
+    36,    36,    36,    21,    62,     3,     3,    37,    24,    37,
+    27,    37,    28,    36,    51,    13,    13,    13,    33,    77,
+    38,    77,    77,    77,    39,    25,    36,    72,    40,    41,
+    15,    25,    25,    67,    34,    34,    34,    43,    44,    46,
+     2,    50,    66,    55,    58,    59,    60,    64,    68,    78,
+   nil,    47,   nil,   nil,   nil,   nil,    77,   nil,    36,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
    nil,   nil,   nil,     2,   nil,   nil,   nil,   nil,   nil,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,    64,    53,
-   nil,   nil,    35,   nil,   nil,    22,   nil,   nil,   nil,   nil,
+   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,    54,   nil,
+   nil,    65,    35,   nil,   nil,    22,   nil,   nil,   nil,   nil,
    nil,   nil,   nil,   nil,     2,     2,     2,     2,   nil,   nil,
-    49,   nil,   nil,    60,     2,     2,     2,   nil,     2,     2,
+    49,   nil,   nil,    61,     2,     2,     2,   nil,     2,     2,
      2,    49,   nil,   nil,   nil,   nil,     2,     2,   nil,     2,
-    16,    16,    60,   nil,     2,   nil,   nil,   nil,    22,    22,
+    16,    16,    61,   nil,     2,   nil,   nil,   nil,    22,    22,
     22,   nil,   nil,   nil,   nil,   nil,     2,     2,     2,   nil,
    nil,   nil,     2,   nil,   nil,   nil,   nil,     2,   nil,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
     16,   nil,   nil,   nil,   nil,   nil,   nil,   nil,    22,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,    22,
-   nil,     2,    15,   nil,   nil,     2,    22,   nil,    22,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,    20,   nil,
+   nil,   nil,   nil,   nil,   nil,   nil,   nil,    15,   nil,    22,
+   nil,     2,   nil,   nil,   nil,     2,    22,   nil,    22,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
+   nil,    20,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
-   nil,    20,   nil,   nil,   nil,   nil,   nil,   nil,    53,   nil,
+   nil,   nil,   nil,   nil,    20,   nil,   nil,    54,   nil,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
    nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,     2,     2,
-    53,   nil,    53,    53,    53,    35,    35,    35,   nil,   nil,
-   nil,   nil,   nil,    20,   nil,    53,   nil,   nil,   nil,   nil,
-   nil,   nil,   nil,   nil,   nil,   nil,    20,    20,    53,   nil,
-   nil,    35,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
-   nil,   nil,     2,   nil,     2,   nil,     2,   nil,   nil,   nil,
-     2,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
-    53,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
-   nil,   nil,   nil,     2,   nil,   nil,     2,     2 ]
+    54,   nil,    54,    54,    54,   nil,    35,    35,    35,   nil,
+   nil,   nil,   nil,   nil,   nil,    54,   nil,    20,   nil,   nil,
+   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,    54,   nil,
+    20,    20,    35,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
+   nil,   nil,   nil,     2,   nil,     2,   nil,     2,   nil,   nil,
+   nil,     2,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
+    54,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,   nil,
+   nil,   nil,   nil,   nil,     2,   nil,   nil,     2,     2 ]
 
 racc_goto_pointer = [
-   nil,    31,    -2,    17,    33,    39,    19,   nil,   nil,   nil,
-   nil,   nil,   nil,  -114,   nil,   -28,   -40,  -219,  -206,  -242,
-   -24,  -200,   -32,  -239,  -223,  -242,   nil,  -205,  -204,   nil,
-   nil,   nil,   nil,  -203,  -260,   -23,  -314,  -321,  -143,  -184,
-  -198,  -240,   nil,  -284,  -296,  -373,    53,   -16,   nil,   -38,
-    40,  -146,   nil,   -26,  -170,  -234,   nil,  -179,   -25,   -81,
-   -48,   -28,   nil,    67,   -27,  -143,  -179,  -101,   nil,   nil,
-   nil,  -183,  -161,   nil,   nil,   nil,  -134,    68 ]
+   nil,    32,    -2,    21,    34,    36,     8,   nil,   nil,   nil,
+   nil,   nil,   nil,  -109,   nil,   -33,   -40,  -218,  -212,  -241,
+   -21,  -210,   -32,  -241,  -233,  -247,   nil,  -220,  -218,   nil,
+   nil,   nil,   nil,  -212,  -241,   -23,  -309,  -319,  -152,  -191,
+  -202,  -244,   nil,  -282,  -297,  -381,    53,   -18,   nil,   -38,
+    40,  -146,   nil,   nil,   -27,  -169,  -241,   nil,  -179,   -25,
+   -81,   -48,   -33,   nil,    67,   -24,  -144,  -174,  -101,   nil,
+   nil,   nil,  -180,  -156,   nil,   nil,   nil,  -134,    68 ]
 
 racc_goto_default = [
-   nil,   nil,    44,   nil,   nil,   413,   311,   107,   108,   109,
+   nil,   nil,    44,   nil,   nil,   414,   311,   107,   108,   109,
    110,   111,   112,   nil,    36,   299,   115,   nil,   nil,   nil,
    nil,   nil,    31,   nil,   278,    24,   301,   302,   303,   304,
    305,   306,   307,   310,   nil,   144,   nil,   nil,   nil,   nil,
    nil,   nil,   323,   nil,   nil,   nil,   nil,   nil,    51,   nil,
-   nil,    52,   347,   145,   nil,   nil,   273,   nil,   nil,   nil,
-     7,   nil,    29,   nil,   nil,   158,   146,   147,   148,   149,
-   150,   151,   152,   153,   154,   155,   nil,   nil ]
+   nil,    52,   339,   340,   145,   nil,   nil,   273,   nil,   nil,
+   nil,     7,   nil,    29,   nil,   nil,   158,   146,   147,   148,
+   149,   150,   151,   152,   153,   154,   155,   nil,   nil ]
 
 racc_reduce_table = [
   0, 0, :racc_error,
@@ -1342,174 +1512,175 @@ racc_reduce_table = [
   4, 133, :_reduce_83,
   1, 127, :_reduce_84,
   2, 127, :_reduce_85,
-  1, 119, :_reduce_none,
-  1, 119, :_reduce_none,
-  1, 119, :_reduce_none,
-  1, 119, :_reduce_none,
-  1, 119, :_reduce_none,
-  1, 119, :_reduce_none,
-  1, 119, :_reduce_none,
-  1, 119, :_reduce_none,
-  1, 119, :_reduce_none,
-  2, 119, :_reduce_95,
-  2, 119, :_reduce_96,
-  1, 119, :_reduce_none,
-  1, 119, :_reduce_none,
-  1, 119, :_reduce_none,
+  1, 119, :_reduce_86,
+  1, 119, :_reduce_87,
+  2, 119, :_reduce_88,
+  2, 119, :_reduce_89,
   1, 135, :_reduce_none,
   1, 135, :_reduce_none,
   1, 135, :_reduce_none,
   1, 135, :_reduce_none,
+  1, 135, :_reduce_none,
+  1, 135, :_reduce_none,
+  1, 135, :_reduce_none,
+  1, 135, :_reduce_none,
+  1, 135, :_reduce_none,
+  1, 135, :_reduce_none,
+  1, 135, :_reduce_none,
   1, 136, :_reduce_none,
   1, 136, :_reduce_none,
   1, 136, :_reduce_none,
   1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  1, 136, :_reduce_none,
-  0, 100, :_reduce_137,
-  3, 100, :_reduce_138,
-  1, 137, :_reduce_139,
-  3, 137, :_reduce_140,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  1, 137, :_reduce_none,
+  0, 100, :_reduce_138,
+  3, 100, :_reduce_139,
+  1, 138, :_reduce_140,
   3, 138, :_reduce_141,
-  0, 140, :_reduce_142,
-  1, 140, :_reduce_143,
-  1, 140, :_reduce_144,
-  0, 139, :_reduce_145,
-  1, 139, :_reduce_146,
-  0, 129, :_reduce_147,
-  3, 129, :_reduce_148,
-  1, 141, :_reduce_149,
-  3, 141, :_reduce_150,
-  4, 116, :_reduce_151,
-  8, 116, :_reduce_152,
-  5, 90, :_reduce_153,
-  3, 91, :_reduce_154,
+  3, 139, :_reduce_142,
+  0, 141, :_reduce_143,
+  1, 141, :_reduce_144,
+  1, 141, :_reduce_145,
+  0, 140, :_reduce_146,
+  1, 140, :_reduce_147,
+  0, 129, :_reduce_148,
+  3, 129, :_reduce_149,
+  1, 142, :_reduce_150,
+  3, 142, :_reduce_151,
+  4, 116, :_reduce_152,
+  8, 116, :_reduce_153,
+  5, 90, :_reduce_154,
   3, 91, :_reduce_155,
-  3, 92, :_reduce_156,
+  3, 91, :_reduce_156,
+  3, 92, :_reduce_157,
   1, 85, :_reduce_none,
-  3, 85, :_reduce_158,
   3, 85, :_reduce_159,
-  1, 143, :_reduce_160,
-  1, 143, :_reduce_161,
-  1, 143, :_reduce_162,
-  1, 143, :_reduce_163,
-  1, 143, :_reduce_164,
-  1, 143, :_reduce_165,
-  1, 143, :_reduce_166,
-  1, 143, :_reduce_167,
-  1, 143, :_reduce_168,
-  1, 143, :_reduce_169,
-  1, 143, :_reduce_170,
-  1, 143, :_reduce_171,
-  1, 143, :_reduce_172,
-  1, 143, :_reduce_173,
-  1, 143, :_reduce_174,
-  1, 143, :_reduce_175,
-  1, 143, :_reduce_176,
-  4, 143, :_reduce_177,
-  2, 143, :_reduce_178,
-  4, 143, :_reduce_179,
-  3, 143, :_reduce_180,
-  4, 143, :_reduce_181,
-  2, 143, :_reduce_182,
-  2, 143, :_reduce_183,
-  1, 143, :_reduce_none,
-  1, 103, :_reduce_185,
-  3, 103, :_reduce_186,
-  4, 145, :_reduce_187,
-  1, 146, :_reduce_188,
-  3, 146, :_reduce_189,
-  3, 147, :_reduce_190,
-  3, 147, :_reduce_191,
-  3, 147, :_reduce_192,
-  2, 147, :_reduce_193,
-  3, 147, :_reduce_194,
-  3, 147, :_reduce_195,
-  3, 147, :_reduce_196,
-  1, 148, :_reduce_none,
-  2, 148, :_reduce_198,
-  1, 118, :_reduce_none,
-  1, 118, :_reduce_none,
-  1, 118, :_reduce_none,
-  1, 118, :_reduce_none,
-  4, 130, :_reduce_203,
-  1, 130, :_reduce_204,
-  5, 134, :_reduce_205,
-  2, 134, :_reduce_206,
-  3, 132, :_reduce_207,
-  1, 132, :_reduce_208,
-  1, 132, :_reduce_none,
-  3, 150, :_reduce_210,
-  1, 150, :_reduce_211,
-  1, 150, :_reduce_none,
-  3, 152, :_reduce_213,
-  1, 152, :_reduce_214,
-  1, 152, :_reduce_none,
-  3, 154, :_reduce_216,
-  1, 154, :_reduce_217,
-  1, 154, :_reduce_none,
-  0, 155, :_reduce_219,
-  3, 155, :_reduce_220,
-  1, 155, :_reduce_221,
-  3, 155, :_reduce_222,
-  1, 155, :_reduce_223,
-  1, 155, :_reduce_224,
-  2, 149, :_reduce_225,
-  3, 151, :_reduce_226,
-  3, 153, :_reduce_227,
-  3, 156, :_reduce_228,
-  4, 157, :_reduce_229,
-  3, 158, :_reduce_230,
-  0, 159, :_reduce_none,
-  1, 159, :_reduce_none,
-  1, 159, :_reduce_none,
-  1, 159, :_reduce_none,
-  1, 159, :_reduce_none,
-  1, 159, :_reduce_none,
-  2, 108, :_reduce_237,
-  1, 160, :_reduce_none,
-  1, 160, :_reduce_none,
-  1, 160, :_reduce_none,
-  2, 121, :_reduce_241,
-  2, 99, :_reduce_242,
-  2, 142, :_reduce_243,
-  0, 105, :_reduce_244,
-  1, 105, :_reduce_245,
-  2, 105, :_reduce_246,
-  1, 105, :_reduce_247,
+  3, 85, :_reduce_160,
+  1, 144, :_reduce_161,
+  1, 144, :_reduce_162,
+  1, 144, :_reduce_163,
+  1, 144, :_reduce_164,
+  1, 144, :_reduce_165,
+  1, 144, :_reduce_166,
+  1, 144, :_reduce_167,
+  1, 144, :_reduce_168,
+  1, 144, :_reduce_169,
+  1, 144, :_reduce_170,
+  1, 144, :_reduce_171,
+  1, 144, :_reduce_172,
+  1, 144, :_reduce_173,
+  1, 144, :_reduce_174,
+  1, 144, :_reduce_175,
+  1, 144, :_reduce_176,
+  1, 144, :_reduce_177,
+  4, 144, :_reduce_178,
+  2, 144, :_reduce_179,
+  4, 144, :_reduce_180,
+  3, 144, :_reduce_181,
+  4, 144, :_reduce_182,
+  2, 144, :_reduce_183,
+  2, 144, :_reduce_184,
   1, 144, :_reduce_none,
-  0, 144, :_reduce_none ]
+  1, 103, :_reduce_186,
+  3, 103, :_reduce_187,
+  4, 146, :_reduce_188,
+  1, 147, :_reduce_189,
+  3, 147, :_reduce_190,
+  3, 148, :_reduce_191,
+  3, 148, :_reduce_192,
+  3, 148, :_reduce_193,
+  2, 148, :_reduce_194,
+  3, 148, :_reduce_195,
+  3, 148, :_reduce_196,
+  3, 148, :_reduce_197,
+  1, 149, :_reduce_none,
+  2, 149, :_reduce_199,
+  1, 118, :_reduce_none,
+  1, 118, :_reduce_none,
+  1, 118, :_reduce_none,
+  1, 118, :_reduce_none,
+  4, 130, :_reduce_204,
+  1, 130, :_reduce_205,
+  5, 134, :_reduce_206,
+  2, 134, :_reduce_207,
+  3, 132, :_reduce_208,
+  1, 132, :_reduce_209,
+  1, 132, :_reduce_none,
+  3, 151, :_reduce_211,
+  1, 151, :_reduce_212,
+  1, 151, :_reduce_none,
+  3, 153, :_reduce_214,
+  1, 153, :_reduce_215,
+  1, 153, :_reduce_none,
+  3, 155, :_reduce_217,
+  1, 155, :_reduce_218,
+  1, 155, :_reduce_none,
+  0, 156, :_reduce_220,
+  3, 156, :_reduce_221,
+  1, 156, :_reduce_222,
+  3, 156, :_reduce_223,
+  1, 156, :_reduce_224,
+  1, 156, :_reduce_225,
+  2, 150, :_reduce_226,
+  3, 152, :_reduce_227,
+  3, 154, :_reduce_228,
+  3, 157, :_reduce_229,
+  4, 158, :_reduce_230,
+  3, 159, :_reduce_231,
+  0, 160, :_reduce_none,
+  1, 160, :_reduce_none,
+  1, 160, :_reduce_none,
+  1, 160, :_reduce_none,
+  1, 160, :_reduce_none,
+  1, 160, :_reduce_none,
+  2, 108, :_reduce_238,
+  1, 161, :_reduce_none,
+  1, 161, :_reduce_none,
+  1, 161, :_reduce_none,
+  2, 121, :_reduce_242,
+  2, 99, :_reduce_243,
+  2, 143, :_reduce_244,
+  0, 105, :_reduce_245,
+  1, 105, :_reduce_246,
+  2, 105, :_reduce_247,
+  1, 105, :_reduce_248,
+  1, 145, :_reduce_none,
+  0, 145, :_reduce_none ]
 
-racc_reduce_n = 250
+racc_reduce_n = 251
 
-racc_shift_n = 424
+racc_shift_n = 425
 
 racc_token_table = {
   false => 0,
@@ -1752,6 +1923,7 @@ Racc_token_to_s_table = [
   "params",
   "block",
   "simple_function_type",
+  "pMethodName1",
   "method_name0",
   "identifier_keywords",
   "module_type_params0",
@@ -1863,7 +2035,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 58)
 
 module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 60)
   def _reduce_17(val, _values, result)
-            result = val[1].unshift(Annotation.new(string: val[0].value, location: val[0].location))
+            result = val[1].unshift(Annotation.new(string: value(val[0]), location: location(token: val[0])))
 
     result
   end
@@ -1873,12 +2045,12 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 65)
   def _reduce_18(val, _values, result)
             reset_variable_scope
 
-        location = val[1].location + val[7].location
+        location = location(start_token: val[1], end_token: val[7])
         location = location.with_children(
           required: {
-            keyword: val[1].location,
+            keyword: location(token: val[1]),
             name: val[3].location,
-            end: val[7].location
+            end: location(token: val[7])
           },
           optional: {
             type_params: val[4]&.location,
@@ -1888,7 +2060,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 65)
         result = Declarations::Class.new(
           name: val[3].value,
           type_params: val[4]&.value || Declarations::ModuleTypeParams.empty,
-          super_class: val[5],
+          super_class: val[5]&.value,
           members: val[6],
           annotations: val[0],
           location: location,
@@ -1912,25 +2084,34 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 93)
           required: { name: val[1].range },
           optional: { args: nil }
         )
-        result = Declarations::Class::Super.new(name: val[1].value, args: [], location: loc)
+        result =
+          LocatedValue.new(
+            value: Declarations::Class::Super.new(name: val[1].value, args: [], location: loc),
+            location: location(token: val[0])
+          )
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 100)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 104)
   def _reduce_21(val, _values, result)
-            loc = (val[1].location + val[4].location).with_children(
+            loc = location(start_pos: val[1].location.start_pos, end_token: val[4]).with_children(
           required: { name: val[1].range },
-          optional: { args: val[2].range.begin...val[4].range.end }
+          optional: { args: tokenizer.start_pos(val[2])...tokenizer.end_pos(val[4]) }
         )
-        result = Declarations::Class::Super.new(name: val[1].value, args: val[3], location: loc)
+        result =
+          LocatedValue.new(
+            value: Declarations::Class::Super.new(name: val[1].value, args: val[3], location: loc),
+            location: location(token: val[0])
+          )
+
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 109)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 118)
   def _reduce_22(val, _values, result)
             reset_variable_scope
 
@@ -1946,12 +2127,12 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 109)
           end
         end
 
-        location = val[1].location + val[7].location
+        location = location(start_token: val[1], end_token: val[7])
         location = location.with_children(
           required: {
-            keyword: val[1].location,
+            keyword: location(token: val[1]),
             name: val[3].location,
-            end: val[7].location
+            end: location(token: val[7])
           },
           optional: {
             type_params: val[4]&.location,
@@ -1973,12 +2154,12 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 109)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 147)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 156)
   def _reduce_23(val, _values, result)
             reset_variable_scope
 
-        location = val[1].location + val[7].location
-        name_loc, colon_loc = split_kw_loc(val[4].location)
+        location = location(start_token: val[1], end_token: val[7])
+        name_loc, colon_loc = split_kw_loc(location(token: val[4]))
         self_loc = case val[5].size
                    when 0
                      nil
@@ -1988,12 +2169,12 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 147)
                      val[5].first.location + val[5].last.location
                    end
         location = location.with_children(
-          required: { keyword: val[1].location, name: name_loc, end: val[7].location },
+          required: { keyword: tokenizer.range(val[1]), name: name_loc, end: tokenizer.range(val[7]) },
           optional: { colon: colon_loc, type_params: nil, self_types: self_loc }
         )
 
         result = Declarations::Module.new(
-          name: RBS::TypeName.new(name: val[4].value, namespace: val[3]&.value || RBS::Namespace.empty),
+          name: RBS::TypeName.new(name: value(val[4]).to_sym, namespace: val[3]&.value || RBS::Namespace.empty),
           type_params: Declarations::ModuleTypeParams.empty,
           self_types: val[5],
           members: val[6],
@@ -2006,22 +2187,22 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 147)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 176)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 185)
   def _reduce_24(val, _values, result)
      result = LocatedValue.new(value: [], location: nil)
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 178)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 187)
   def _reduce_25(val, _values, result)
-            result = LocatedValue.new(value: val[1], location: val[0].location)
+            result = LocatedValue.new(value: val[1], location: location(token: val[0]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 183)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 192)
   def _reduce_26(val, _values, result)
             result = [val[0]]
 
@@ -2029,7 +2210,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 183)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 186)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 195)
   def _reduce_27(val, _values, result)
             result = val[0].push(val[2])
 
@@ -2037,14 +2218,14 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 186)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 191)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 200)
   def _reduce_28(val, _values, result)
             name = val[0].value
         args = val[2]
-        location = val[0].location + val[3].location
+        location = location(start_pos: val[0].location.start_pos, end_token: val[3])
         location = location.with_children(
           required: { name: val[0].location },
-          optional: { args: val[1].location + val[3].location }
+          optional: { args: tokenizer.start_pos(val[1])...tokenizer.end_pos(val[3]) }
         )
 
         case
@@ -2060,7 +2241,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 191)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 209)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 218)
   def _reduce_29(val, _values, result)
             name = val[0].value
         args = []
@@ -2082,14 +2263,14 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 209)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 227)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 236)
   def _reduce_30(val, _values, result)
      result = []
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 229)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 238)
   def _reduce_31(val, _values, result)
             result = val[0].push(val[1])
 
@@ -2109,17 +2290,17 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 229)
 
 # reduce 37 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 240)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 249)
   def _reduce_38(val, _values, result)
-            result = Members::Public.new(location: val[0].location)
+            result = Members::Public.new(location: location(token: val[0]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 243)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 252)
   def _reduce_39(val, _values, result)
-            result = Members::Private.new(location: val[0].location)
+            result = Members::Private.new(location: location(token: val[0]))
 
     result
   end
@@ -2129,29 +2310,29 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 243)
 
 # reduce 41 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 249)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 258)
   def _reduce_42(val, _values, result)
      result = LocatedValue.new(value: :instance, location: nil)
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 250)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 259)
   def _reduce_43(val, _values, result)
-     result = LocatedValue.new(value: :singleton, location: val[0].location + val[1].location)
+     result = LocatedValue.new(value: :singleton, location: location(start_token: val[0], end_token: val[1]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 254)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 263)
   def _reduce_44(val, _values, result)
-            location = val[1].location + val[4].location
-        name_loc, colon_loc = split_kw_loc(val[3].location)
+            location = location(start_token: val[1], end_pos: val[4].location.end_pos)
+        name_loc, colon_loc = split_kw_loc(location(token: val[3]))
         location = location.with_children(
-          required: { keyword: val[1].location, name: name_loc, colon: colon_loc },
+          required: { keyword: tokenizer.range(val[1]), name: name_loc, colon: colon_loc },
           optional: { ivar: nil, ivar_name: nil, kind: val[2].location }
         )
-        result = Members::AttrReader.new(name: val[3].value,
+        result = Members::AttrReader.new(name: value(val[3]),
                                          ivar_name: nil,
                                          type: val[4],
                                          kind: val[2].value,
@@ -2163,9 +2344,9 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 254)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 269)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 278)
   def _reduce_45(val, _values, result)
-            location = val[1].location + val[6].location
+            location = location(start_token: val[1], end_pos: val[6].location.end_pos)
         ivar_loc = val[4]&.location
         case name_value = val[4]&.value
         when LocatedValue
@@ -2179,7 +2360,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 269)
           ivar_loc = nil
         end
         location = location.with_children(
-          required: { keyword: val[1].location, name: val[3].location, colon: val[5].location },
+          required: { keyword: tokenizer.range(val[1]), name: val[3].location, colon: tokenizer.range(val[5]) },
           optional: { ivar: ivar_loc, ivar_name: ivar_name_loc, kind: val[2].location }
         )
         result = Members::AttrReader.new(name: val[3].value.to_sym,
@@ -2194,15 +2375,15 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 269)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 295)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 304)
   def _reduce_46(val, _values, result)
-            location = val[1].location + val[4].location
-        name_loc, colon_loc = split_kw_loc(val[3].location)
+            location = location(start_token: val[1], end_pos: val[4].location.end_pos)
+        name_loc, colon_loc = split_kw_loc(location(token: val[3]))
         location = location.with_children(
-          required: { keyword: val[1].location, name: name_loc, colon: colon_loc },
+          required: { keyword: tokenizer.range(val[1]), name: name_loc, colon: colon_loc },
           optional: { ivar: nil, ivar_name: nil, kind: val[2].location }
         )
-        result = Members::AttrWriter.new(name: val[3].value,
+        result = Members::AttrWriter.new(name: value(val[3]),
                                          ivar_name: nil,
                                          kind: val[2].value,
                                          type: val[4],
@@ -2214,9 +2395,9 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 295)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 310)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 319)
   def _reduce_47(val, _values, result)
-            location = val[1].location + val[6].location
+            location = location(start_token: val[1], end_pos: val[6].location.end_pos)
         ivar_loc = val[4]&.location
         case name_value = val[4]&.value
         when LocatedValue
@@ -2230,7 +2411,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 310)
           ivar_loc = nil
         end
         location = location.with_children(
-          required: { keyword: val[1].location, name: val[3].location, colon: val[5].location },
+          required: { keyword: tokenizer.range(val[1]), name: val[3].location, colon: tokenizer.range(val[5]) },
           optional: { ivar: ivar_loc, ivar_name: ivar_name_loc, kind: val[2].location }
         )
 
@@ -2246,16 +2427,16 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 310)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 337)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 346)
   def _reduce_48(val, _values, result)
-            location = val[1].location + val[4].location
-        name_loc, colon_loc = split_kw_loc(val[3].location)
+            location = location(start_token: val[1], end_pos: val[4].location.end_pos)
+        name_loc, colon_loc = split_kw_loc(location(token: val[3]))
         location = location.with_children(
-          required: { keyword: val[1].location, name: name_loc, colon: colon_loc },
+          required: { keyword: tokenizer.range(val[1]), name: name_loc, colon: colon_loc },
           optional: { ivar: nil, ivar_name: nil, kind: val[2].location }
         )
 
-        result = Members::AttrAccessor.new(name: val[3].value,
+        result = Members::AttrAccessor.new(name: value(val[3]).to_sym,
                                            ivar_name: nil,
                                            kind: val[2].value,
                                            type: val[4],
@@ -2267,9 +2448,9 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 337)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 353)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 362)
   def _reduce_49(val, _values, result)
-            location = val[1].location + val[6].location
+            location = location(start_token: val[1], end_pos: val[6].location.end_pos)
         ivar_loc = val[4]&.location
         case name_value = val[4]&.value
         when LocatedValue
@@ -2283,7 +2464,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 353)
           ivar_loc = nil
         end
         location = location.with_children(
-          required: { keyword: val[1].location, name: val[3].location, colon: val[5].location },
+          required: { keyword: tokenizer.range(val[1]), name: val[3].location, colon: tokenizer.range(val[5]) },
           optional: { ivar: ivar_loc, ivar_name: ivar_name_loc, kind: val[2].location }
         )
 
@@ -2299,40 +2480,40 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 353)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 381)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 390)
   def _reduce_50(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 382)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 391)
   def _reduce_51(val, _values, result)
-     result = LocatedValue.new(value: false, location: val[0].location + val[1].location)
+     result = LocatedValue.new(value: false, location: location(start_token: val[0], end_token: val[1]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 384)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 393)
   def _reduce_52(val, _values, result)
             result = LocatedValue.new(
-          value: val[1],
-          location: val[0].location + val[2].location
+          value: LocatedValue.new(value: value(val[1]).to_sym, location: location(token: val[1])),
+          location: location(start_token: val[0], end_token: val[2])
         )
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 392)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 401)
   def _reduce_53(val, _values, result)
-            location = (val[0].location + val[2].location).with_children(
-          required: { name: val[0].location, colon: val[1].location },
+            location = location(start_token: val[0], end_pos: val[2].location.end_pos).with_children(
+          required: { name: tokenizer.range(val[0]), colon: tokenizer.range(val[1]) },
           optional: { kind: nil }
         )
 
         result = Members::InstanceVariable.new(
-          name: val[0].value,
+          name: value(val[0]).to_sym,
           type: val[2],
           location: location,
           comment: nil
@@ -2342,7 +2523,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 392)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 405)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 414)
   def _reduce_54(val, _values, result)
             type = val[2]
 
@@ -2354,13 +2535,13 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 405)
           )
         end
 
-        location = (val[0].location + val[2].location).with_children(
-          required: { name: val[0].location, colon: val[1].location },
+        location = location(start_token: val[0], end_pos: val[2].location.end_pos).with_children(
+          required: { name: tokenizer.range(val[0]), colon: tokenizer.range(val[1]) },
           optional: { kind: nil }
         )
 
         result = Members::ClassVariable.new(
-          name: val[0].value,
+          name: value(val[0]).to_sym,
           type: type,
           location: location,
           comment: nil
@@ -2370,7 +2551,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 405)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 428)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 437)
   def _reduce_55(val, _values, result)
           type = val[4]
 
@@ -2382,13 +2563,13 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 428)
         )
       end
 
-      location = (val[0].location + val[4].location).with_children(
-        required: { name: val[2].location, colon: val[3].location },
-        optional: { kind: val[0].location + val[1].location }
+      location = location(start_token: val[0], end_pos: val[4].location.end_pos).with_children(
+        required: { name: tokenizer.range(val[2]), colon: tokenizer.range(val[3]) },
+        optional: { kind: tokenizer.start_pos(val[0])...tokenizer.end_pos(val[1]) }
       )
 
       result = Members::ClassInstanceVariable.new(
-        name: val[2].value,
+        name: value(val[2]).to_sym,
         type: type,
         location: location,
         comment: nil
@@ -2398,13 +2579,13 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 428)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 453)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 462)
   def _reduce_56(val, _values, result)
             reset_variable_scope
 
-        location = val[1].location + val[6].location
+        location = location(start_token: val[1], end_token: val[6])
         location = location.with_children(
-          required: { keyword: val[1].location, name: val[3].location, end: val[6].location },
+          required: { keyword: tokenizer.range(val[1]), name: val[3].location, end: tokenizer.range(val[6]) },
           optional: { type_params: val[4]&.location }
         )
         result = Declarations::Interface.new(
@@ -2420,14 +2601,14 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 453)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 471)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 480)
   def _reduce_57(val, _values, result)
      result = []
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 473)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 482)
   def _reduce_58(val, _values, result)
             result = val[0].push(val[1])
 
@@ -2435,7 +2616,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 473)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 478)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 487)
   def _reduce_59(val, _values, result)
             unless val[0].kind == :instance
           raise SemanticsError.new("Interface cannot have singleton method", subject: val[0], location: val[0].location)
@@ -2451,7 +2632,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 478)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 489)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 498)
   def _reduce_60(val, _values, result)
             unless val[0].name.interface?
           raise SemanticsError.new("Interface should include an interface", subject: val[0], location: val[0].location)
@@ -2465,14 +2646,14 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 489)
 
 # reduce 61 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 499)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 508)
   def _reduce_62(val, _values, result)
             if val[2].value.alias?
           raise SemanticsError.new("Should include module or interface", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[2].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
+        location = location(start_token: val[1], end_pos: val[2].location.end_pos).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
           optional: { args: nil }
         )
 
@@ -2486,15 +2667,15 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 499)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 515)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 524)
   def _reduce_63(val, _values, result)
             if val[2].value.alias?
           raise SemanticsError.new("Should include module or interface", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[5].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
-          optional: { args: val[3].location + val[5].location }
+        location = location(start_token: val[1], end_token: val[5]).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
+          optional: { args: tokenizer.start_pos(val[3])...tokenizer.end_pos(val[5]) }
         )
 
         result = Members::Include.new(name: val[2].value,
@@ -2507,14 +2688,14 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 515)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 533)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 542)
   def _reduce_64(val, _values, result)
             if val[2].value.alias?
           raise SemanticsError.new("Should extend module or interface", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[2].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
+        location = location(start_token: val[1], end_pos: val[2].location.end_pos).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
           optional: { args: nil }
         )
 
@@ -2528,15 +2709,15 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 533)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 549)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 558)
   def _reduce_65(val, _values, result)
             if val[2].value.alias?
           raise SemanticsError.new("Should extend module or interface", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[5].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
-          optional: { args: val[3].location + val[5].location }
+        location = location(start_token: val[1], end_token: val[5]).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
+          optional: { args: tokenizer.start_pos(val[3])...tokenizer.end_pos(val[5]) }
         )
 
         result = Members::Extend.new(name: val[2].value,
@@ -2549,14 +2730,14 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 549)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 567)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 576)
   def _reduce_66(val, _values, result)
             unless val[2].value.class?
           raise SemanticsError.new("Should prepend module", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[2].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
+        location = location(start_token: val[1], end_pos: val[2].location.end_pos).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
           optional: { args: nil }
         )
 
@@ -2570,15 +2751,15 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 567)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 583)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 592)
   def _reduce_67(val, _values, result)
             unless val[2].value.class?
           raise SemanticsError.new("Should prepend module", subject: val[2].value, location: val[2].location)
         end
 
-        location = (val[1].location + val[5].location).with_children(
-          required: { keyword: val[1].location, name: val[2].location },
-          optional: { args: val[3].location + val[5].location }
+        location = location(start_token: val[1], end_token: val[5]).with_children(
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location },
+          optional: { args: tokenizer.start_pos(val[3])...tokenizer.end_pos(val[5]) }
         )
 
         result = Members::Prepend.new(name: val[2].value,
@@ -2591,14 +2772,14 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 583)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 600)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 609)
   def _reduce_68(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 602)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 611)
   def _reduce_69(val, _values, result)
             RBS.logger.warn "`overload def` syntax is deprecated. Use `...` syntax instead."
         result = val[0]
@@ -2607,11 +2788,12 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 602)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 608)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 617)
   def _reduce_70(val, _values, result)
-            location = val[3].location + val[6].last.location
+            kdef = val[3]
+        location = location(start_token: kdef, end_pos: val[6].last.location.end_pos)
 
-        required_children = { keyword: val[3].location, name: val[5].location }
+        required_children = { keyword: tokenizer.range(kdef), name: val[5].location }
         optional_children = { kind: nil, overload: nil }
 
         if val[4]
@@ -2646,7 +2828,7 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 608)
 
 # reduce 71 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 642)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 652)
   def _reduce_72(val, _values, result)
             RBS.logger.warn "`incompatible` method attribute is deprecated and ignored."
 
@@ -2654,42 +2836,42 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 642)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 646)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 656)
   def _reduce_73(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 647)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 657)
   def _reduce_74(val, _values, result)
-     result = LocatedValue.new(value: :singleton, location: val[0].location + val[1].location)
+     result = LocatedValue.new(value: :singleton, location: location(start_token: val[0], end_token: val[1]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 648)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 658)
   def _reduce_75(val, _values, result)
-     result = LocatedValue.new(value: :singleton_instance, location: val[0].location + val[1].location)
+     result = LocatedValue.new(value: :singleton_instance, location: location(start_token: val[0], end_token: val[1]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 651)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 661)
   def _reduce_76(val, _values, result)
      result = [val[0]]
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 652)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 662)
   def _reduce_77(val, _values, result)
-     result = [LocatedValue.new(value: :dot3, location: val[0].location)]
+     result = [LocatedValue.new(value: :dot3, location: location(token: val[0]))]
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 654)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 664)
   def _reduce_78(val, _values, result)
             result = val[2].unshift(val[0])
 
@@ -2697,11 +2879,16 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 654)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 659)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 669)
   def _reduce_79(val, _values, result)
             reset_variable_scope
 
-        location = (val[1] || val[2]).location + val[2].location
+        location =
+          if val[1]
+            val[1].location + val[2].location
+          else
+            val[2].location
+          end
         type_params = val[1]&.value || []
 
         type, block = val[2].value
@@ -2715,68 +2902,111 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 659)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 673)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 688)
   def _reduce_80(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 675)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 690)
   def _reduce_81(val, _values, result)
-            result = LocatedValue.new(value: val[1], location: val[0].location + val[2].location)
+            result = LocatedValue.new(value: val[1], location: location(start_token: val[0], end_token: val[2]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 680)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 695)
   def _reduce_82(val, _values, result)
             block = Types::Block.new(type: val[1].value, required: true)
-        result = LocatedValue.new(value: block, location: val[0].location + val[2].location)
+        result = LocatedValue.new(value: block, location: location(start_token: val[0], end_token: val[2]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 684)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 699)
   def _reduce_83(val, _values, result)
             block = Types::Block.new(type: val[2].value, required: false)
-        result = LocatedValue.new(value: block, location: val[0].location + val[3].location)
+        result = LocatedValue.new(value: block, location: location(start_token: val[0], end_token: val[3]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 690)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 705)
   def _reduce_84(val, _values, result)
-            loc = val[0].location
+            start_pos = tokenizer.start_pos(val[0])
+        end_pos = tokenizer.end_pos(val[0])
+        value = value(val[0])
+
+        result = LocatedValue.new(value: value, buffer: buffer, range: start_pos...end_pos-1)
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 712)
+  def _reduce_85(val, _values, result)
+            result = LocatedValue.new(value: val[0].value.to_sym,
+                                  location: val[0].value)
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 718)
+  def _reduce_86(val, _values, result)
+            result = LocatedValue.new(value: value(val[0]), buffer: buffer, range: tokenizer.range(val[0]))
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 721)
+  def _reduce_87(val, _values, result)
+            result = LocatedValue.new(value: value(val[0]), buffer: buffer, range: tokenizer.range(val[0]))
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 724)
+  def _reduce_88(val, _values, result)
+            loc0 = location(token: val[0])
+        loc1 = location(token: val[1])
+        unless loc0.pred?(loc1)
+          raise SyntaxError.new(token_str: "kQUESTION", error_value: value(val[1]))
+        end
 
         result = LocatedValue.new(
-          value: val[0].value,
-          location: Location.new(buffer: loc.buffer, start_pos: loc.start_pos, end_pos: loc.end_pos - 1)
+          value: "#{value(val[0])}?",
+          buffer: buffer,
+          range: loc0.start_pos...loc1.end_pos
         )
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 698)
-  def _reduce_85(val, _values, result)
-            result = LocatedValue.new(value: val[0].value.to_sym,
-                                  location: val[0].location + val[1].location)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 737)
+  def _reduce_89(val, _values, result)
+            loc0 = location(token: val[0])
+        loc1 = location(token: val[1])
+        unless loc0.pred?(loc1)
+          raise SyntaxError.new(token_str: "kEXCLAMATION", error_value: value(val[1]))
+        end
+
+        result = LocatedValue.new(
+          value: "#{value(val[0])}!",
+          buffer: buffer,
+          range: loc0.start_pos...loc1.end_pos
+        )
 
     result
   end
 .,.,
-
-# reduce 86 omitted
-
-# reduce 87 omitted
-
-# reduce 88 omitted
-
-# reduce 89 omitted
 
 # reduce 90 omitted
 
@@ -2788,31 +3018,9 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 698)
 
 # reduce 94 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 707)
-  def _reduce_95(val, _values, result)
-            unless val[0].location.pred?(val[1].location)
-          raise SyntaxError.new(token_str: "kQUESTION", error_value: val[1])
-        end
+# reduce 95 omitted
 
-        result = LocatedValue.new(value: "#{val[0].value}?",
-                                  location: val[0].location + val[1].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 715)
-  def _reduce_96(val, _values, result)
-            unless val[0].location.pred?(val[1].location)
-          raise SyntaxError.new(token_str: "kEXCLAMATION", error_value: val[1])
-        end
-
-        result = LocatedValue.new(value: "#{val[0].value}!",
-                                  location: val[0].location + val[1].location)
-
-    result
-  end
-.,.,
+# reduce 96 omitted
 
 # reduce 97 omitted
 
@@ -2894,25 +3102,27 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 715)
 
 # reduce 136 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 735)
-  def _reduce_137(val, _values, result)
+# reduce 137 omitted
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 762)
+  def _reduce_138(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 737)
-  def _reduce_138(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 764)
+  def _reduce_139(val, _values, result)
             val[1].each {|p| insert_bound_variable(p.name) }
 
-        result = LocatedValue.new(value: val[1], location: val[0].location + val[2].location)
+        result = LocatedValue.new(value: val[1], location: location(start_token: val[0], end_token: val[2]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 744)
-  def _reduce_139(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 771)
+  def _reduce_140(val, _values, result)
             result = Declarations::ModuleTypeParams.new()
         result.add(val[0])
 
@@ -2920,30 +3130,30 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 744)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 748)
-  def _reduce_140(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 775)
+  def _reduce_141(val, _values, result)
             result = val[0].add(val[2])
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 753)
-  def _reduce_141(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 780)
+  def _reduce_142(val, _values, result)
             loc = case
               when l0 = val[0].location
-                l0 + val[2].location
+                l0 + location(token: val[2])
               when l1 = val[1].location
-                l1 + val[2].location
+                l1 + location(token: val[2])
               else
-                val[2].location
+                location(token: val[2])
               end
         loc = loc.with_children(
-          required: { name: val[2].location },
+          required: { name: tokenizer.range(val[2]) },
           optional: { variance: val[1].location, unchecked: val[0].location }
         )
         result = Declarations::ModuleTypeParams::TypeParam.new(
-          name: val[2].value.to_sym,
+          name: value(val[2]).to_sym,
           variance: val[1].value,
           skip_validation: val[0].value,
           location: loc
@@ -2953,80 +3163,80 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 753)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 774)
-  def _reduce_142(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 801)
+  def _reduce_143(val, _values, result)
      result = LocatedValue.new(value: :invariant, location: nil)
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 775)
-  def _reduce_143(val, _values, result)
-     result = LocatedValue.new(value: :covariant, location: val[0].location)
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 776)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 802)
   def _reduce_144(val, _values, result)
-     result = LocatedValue.new(value: :contravariant, location: val[0].location)
+     result = LocatedValue.new(value: :covariant, location: location(token: val[0]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 779)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 803)
   def _reduce_145(val, _values, result)
+     result = LocatedValue.new(value: :contravariant, location: location(token: val[0]))
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 806)
+  def _reduce_146(val, _values, result)
      result = LocatedValue.new(value: false, location: nil)
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 780)
-  def _reduce_146(val, _values, result)
-     result = LocatedValue.new(value: true, location: val[0].location)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 807)
+  def _reduce_147(val, _values, result)
+     result = LocatedValue.new(value: true, location: location(token: val[0]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 783)
-  def _reduce_147(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 810)
+  def _reduce_148(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 785)
-  def _reduce_148(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 812)
+  def _reduce_149(val, _values, result)
             val[1].each {|var| insert_bound_variable(var) }
 
         result = LocatedValue.new(value: val[1],
-                                  location: val[0].location + val[2].location)
+                                  location: location(start_token: val[0], end_token: val[2]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 793)
-  def _reduce_149(val, _values, result)
-            result = [val[0].value.to_sym]
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 796)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 820)
   def _reduce_150(val, _values, result)
-            result = val[0].push(val[2].value.to_sym)
+            result = [value(val[0]).to_sym]
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 801)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 823)
   def _reduce_151(val, _values, result)
-            location = val[1].location + val[3].location
+            result = val[0].push(value(val[2]).to_sym)
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 828)
+  def _reduce_152(val, _values, result)
+            location = location(start_token: val[1], end_pos: val[3].location.end_pos)
         location = location.with_children(
-          required: { keyword: val[1].location, new_name: val[2].location, old_name: val[3].location },
+          required: { keyword: location(token: val[1]), new_name: val[2].location, old_name: val[3].location },
           optional: { new_kind: nil, old_kind: nil }
         )
         result = Members::Alias.new(
@@ -3042,14 +3252,14 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 801)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 816)
-  def _reduce_152(val, _values, result)
-            location = val[1].location + val[7].location
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 843)
+  def _reduce_153(val, _values, result)
+            location = location(start_token: val[1], end_pos: val[7].location.end_pos)
         location = location.with_children(
-          required: { keyword: val[1].location, new_name: val[4].location, old_name: val[7].location },
+          required: { keyword: tokenizer.range(val[1]), new_name: val[4].location, old_name: val[7].location },
           optional: {
-            new_kind: val[2].location + val[3].location,
-            old_kind: val[5].location + val[6].location
+            new_kind: location(start_token: val[2], end_token: val[3]),
+            old_kind: location(start_token: val[5], end_token: val[6])
           }
         )
         result = Members::Alias.new(
@@ -3065,11 +3275,11 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 816)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 836)
-  def _reduce_153(val, _values, result)
-            location = val[1].location + val[4].location
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 863)
+  def _reduce_154(val, _values, result)
+            location = location(start_token: val[1], end_pos: val[4].location.end_pos)
         location = location.with_children(
-          required: { keyword: val[1].location, name: val[2].location, eq: val[3].location }
+          required: { keyword: tokenizer.range(val[1]), name: val[2].location, eq: tokenizer.range(val[3]) }
         )
         result = Declarations::Alias.new(
           name: val[2].value,
@@ -3083,11 +3293,11 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 836)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 851)
-  def _reduce_154(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 878)
+  def _reduce_155(val, _values, result)
             location = val[0].location + val[2].location
         location = location.with_children(
-          required: { name: val[0].location, colon: val[1].location }
+          required: { name: val[0].location, colon: tokenizer.range(val[1]) }
         )
         result = Declarations::Constant.new(name: val[0].value,
                                             type: val[2],
@@ -3098,17 +3308,22 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 851)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 861)
-  def _reduce_155(val, _values, result)
-            location = (val[0] || val[1]).location + val[2].location
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 888)
+  def _reduce_156(val, _values, result)
+            if val[0]
+          lhs_loc = location(start_pos: val[0].location.start_pos, end_token: val[1])
+          location = val[0].location + val[2].location
+        else
+          lhs_loc = location(token: val[1])
+          location = lhs_loc + val[2].location
+        end
 
-        lhs_loc = (val[0] || val[1]).location + val[1].location
         name_loc, colon_loc = split_kw_loc(lhs_loc)
         location = location.with_children(
           required: { name: name_loc, colon: colon_loc }
         )
 
-        name = TypeName.new(name: val[1].value, namespace: val[0]&.value || Namespace.empty)
+        name = TypeName.new(name: value(val[1]), namespace: val[0]&.value || Namespace.empty)
         result = Declarations::Constant.new(name: name,
                                             type: val[2],
                                             location: location,
@@ -3118,13 +3333,13 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 861)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 878)
-  def _reduce_156(val, _values, result)
-            location = val[0].location + val[2].location
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 910)
+  def _reduce_157(val, _values, result)
+            location = location(start_token: val[0], end_pos: val[2].location.end_pos)
         location = location.with_children(
-          required: { name: val[0].location, colon: val[1].location }
+          required: { name: tokenizer.range(val[0]), colon: tokenizer.range(val[1]) }
         )
-        result = Declarations::Global.new(name: val[0].value.to_sym,
+        result = Declarations::Global.new(name: value(val[0]).to_sym,
                                           type: val[2],
                                           location: location,
                                           comment: nil)
@@ -3133,10 +3348,10 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 878)
   end
 .,.,
 
-# reduce 157 omitted
+# reduce 158 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 891)
-  def _reduce_158(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 923)
+  def _reduce_159(val, _values, result)
             types = case l = val[0]
                 when Types::Union
                   l.types + [val[2]]
@@ -3150,8 +3365,8 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 891)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 901)
-  def _reduce_159(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 933)
+  def _reduce_160(val, _values, result)
             types = case l = val[0]
                 when Types::Intersection
                   l.types + [val[2]]
@@ -3166,138 +3381,142 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 901)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 914)
-  def _reduce_160(val, _values, result)
-            result = Types::Bases::Void.new(location: val[0].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 917)
-  def _reduce_161(val, _values, result)
-            RBS.logger.warn "`any` type is deprecated. Use `untyped` instead. (#{val[0].location.to_s})"
-        result = Types::Bases::Any.new(location: val[0].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 921)
-  def _reduce_162(val, _values, result)
-            result = Types::Bases::Any.new(location: val[0].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 924)
-  def _reduce_163(val, _values, result)
-            result = Types::Bases::Bool.new(location: val[0].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 927)
-  def _reduce_164(val, _values, result)
-            result = Types::Bases::Nil.new(location: val[0].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 930)
-  def _reduce_165(val, _values, result)
-            result = Types::Bases::Top.new(location: val[0].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 933)
-  def _reduce_166(val, _values, result)
-            result = Types::Bases::Bottom.new(location: val[0].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 936)
-  def _reduce_167(val, _values, result)
-            result = Types::Bases::Self.new(location: val[0].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 939)
-  def _reduce_168(val, _values, result)
-            result = Types::Optional.new(type: Types::Bases::Self.new(location: val[0].location),
-                                     location: val[0].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 943)
-  def _reduce_169(val, _values, result)
-            result = Types::Bases::Instance.new(location: val[0].location)
-
-    result
-  end
-.,.,
-
 module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 946)
-  def _reduce_170(val, _values, result)
-            result = Types::Bases::Class.new(location: val[0].location)
+  def _reduce_161(val, _values, result)
+            result = Types::Bases::Void.new(location: location(token: val[0]))
 
     result
   end
 .,.,
 
 module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 949)
+  def _reduce_162(val, _values, result)
+            loc = location(token: val[0])
+        RBS.logger.warn "`any` type is deprecated. Use `untyped` instead. (#{loc.to_s})"
+        result = Types::Bases::Any.new(location: loc)
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 954)
+  def _reduce_163(val, _values, result)
+            result = Types::Bases::Any.new(location: location(token: val[0]))
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 957)
+  def _reduce_164(val, _values, result)
+            result = Types::Bases::Bool.new(location: location(token: val[0]))
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 960)
+  def _reduce_165(val, _values, result)
+            result = Types::Bases::Nil.new(location: location(token: val[0]))
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 963)
+  def _reduce_166(val, _values, result)
+            result = Types::Bases::Top.new(location: location(token: val[0]))
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 966)
+  def _reduce_167(val, _values, result)
+            result = Types::Bases::Bottom.new(location: location(token: val[0]))
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 969)
+  def _reduce_168(val, _values, result)
+            result = Types::Bases::Self.new(location: location(token: val[0]))
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 972)
+  def _reduce_169(val, _values, result)
+            loc = location(token: val[0])
+        result = Types::Optional.new(
+          type: Types::Bases::Self.new(location: loc),
+          location: loc
+        )
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 979)
+  def _reduce_170(val, _values, result)
+            result = Types::Bases::Instance.new(location: location(token: val[0]))
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 982)
   def _reduce_171(val, _values, result)
-            result = Types::Literal.new(literal: true, location: val[0].location)
+            result = Types::Bases::Class.new(location: location(token: val[0]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 952)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 985)
   def _reduce_172(val, _values, result)
-            result = Types::Literal.new(literal: false, location: val[0].location)
+            result = Types::Literal.new(literal: true, location: location(token: val[0]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 955)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 988)
   def _reduce_173(val, _values, result)
-            result = Types::Literal.new(literal: val[0].value, location: val[0].location)
+            result = Types::Literal.new(literal: false, location: location(token: val[0]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 958)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 991)
   def _reduce_174(val, _values, result)
-            result = Types::Literal.new(literal: val[0].value, location: val[0].location)
+            result = Types::Literal.new(literal: value(val[0]), location: location(token: val[0]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 961)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 994)
   def _reduce_175(val, _values, result)
-            result = Types::Literal.new(literal: val[0].value, location: val[0].location)
+            result = Types::Literal.new(literal: value(val[0]), location: location(token: val[0]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 964)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 997)
   def _reduce_176(val, _values, result)
+            result = Types::Literal.new(literal: value(val[0]), location: location(token: val[0]))
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1000)
+  def _reduce_177(val, _values, result)
             name = val[0].value
         args = []
         location = val[0].location
@@ -3331,11 +3550,12 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 964)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 994)
-  def _reduce_177(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1030)
+  def _reduce_178(val, _values, result)
             name = val[0].value
         args = val[2]
-        location = val[0].location + val[3].location
+        location = val[0].location + location(token: val[3])
+        args_range = tokenizer.start_pos(val[1])...tokenizer.end_pos(val[3])
 
         case
         when name.class?
@@ -3344,13 +3564,13 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 994)
           end
           location = location.with_children(
             required: { name: val[0].location },
-            optional: { args: val[1].location + val[3].location }
+            optional: { args: args_range }
           )
           result = Types::ClassInstance.new(name: name, args: args, location: location)
         when name.interface?
           location = location.with_children(
             required: { name: val[0].location },
-            optional: { args: val[1].location + val[3].location }
+            optional: { args: args_range }
           )
           result = Types::Interface.new(name: name, args: args, location: location)
         else
@@ -3361,18 +3581,18 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 994)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1019)
-  def _reduce_178(val, _values, result)
-            location = val[0].location + val[1].location
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1056)
+  def _reduce_179(val, _values, result)
+            location = location(range: tokenizer.start_pos(val[0])...tokenizer.end_pos(val[1]))
         result = Types::Tuple.new(types: [], location: location)
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1023)
-  def _reduce_179(val, _values, result)
-            location = val[0].location + val[3].location
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1060)
+  def _reduce_180(val, _values, result)
+            location = location(range: tokenizer.start_pos(val[0])...tokenizer.end_pos(val[3]))
         types = val[1]
         result = Types::Tuple.new(types: types, location: location)
 
@@ -3380,11 +3600,12 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1023)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1028)
-  def _reduce_180(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1065)
+  def _reduce_181(val, _values, result)
             type = val[1].dup
+        loc = location(start_token: val[0], end_token: val[2])
         type.instance_eval do
-          @location = val[0].location + val[2].location
+          @location = loc
         end
         result = type
 
@@ -3392,9 +3613,9 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1028)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1035)
-  def _reduce_181(val, _values, result)
-            location = val[0].location + val[3].location
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1073)
+  def _reduce_182(val, _values, result)
+            location = location(start_token: val[0], end_token: val[3])
         location = location.with_children(
           required: { name: val[2].location }
         )
@@ -3404,135 +3625,134 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1035)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1042)
-  def _reduce_182(val, _values, result)
-            type, block = val[1].value
-        result = Types::Proc.new(type: type, block: block, location: val[0].location + val[1].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1046)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1080)
   def _reduce_183(val, _values, result)
-            result = Types::Optional.new(type: val[0], location: val[0].location + val[1].location)
-
-    result
-  end
-.,.,
-
-# reduce 184 omitted
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1052)
-  def _reduce_185(val, _values, result)
-            result = [val[0]]
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1055)
-  def _reduce_186(val, _values, result)
-            result = val[0] + [val[2]]
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1060)
-  def _reduce_187(val, _values, result)
-            result = Types::Record.new(
-          fields: val[1],
-          location: val[0].location + val[3].location
-        )
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1068)
-  def _reduce_188(val, _values, result)
-            result = val[0]
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1071)
-  def _reduce_189(val, _values, result)
-            result = val[0].merge!(val[2])
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1076)
-  def _reduce_190(val, _values, result)
-            result = { val[0].value => val[2] }
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1079)
-  def _reduce_191(val, _values, result)
-            result = { val[0].value => val[2] }
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1082)
-  def _reduce_192(val, _values, result)
-            result = { val[0].value => val[2] }
+            type, block = val[1].value
+        location = location(start_token: val[0], end_pos: val[1].location.end_pos)
+        result = Types::Proc.new(type: type, block: block, location: location)
 
     result
   end
 .,.,
 
 module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1085)
-  def _reduce_193(val, _values, result)
-            result = { val[0].value => val[1] }
+  def _reduce_184(val, _values, result)
+            result = Types::Optional.new(type: val[0], location: location(start_pos: val[0].location.start_pos, end_token: val[1]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1088)
-  def _reduce_194(val, _values, result)
-            result = { val[0].value => val[2] }
-
-    result
-  end
-.,.,
+# reduce 185 omitted
 
 module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1091)
-  def _reduce_195(val, _values, result)
-            result = { val[0].value => val[2] }
+  def _reduce_186(val, _values, result)
+            result = [val[0]]
 
     result
   end
 .,.,
 
 module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1094)
-  def _reduce_196(val, _values, result)
-            result = { val[0].value => val[2] }
+  def _reduce_187(val, _values, result)
+            result = val[0] + [val[2]]
 
     result
   end
 .,.,
 
-# reduce 197 omitted
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1099)
+  def _reduce_188(val, _values, result)
+            result = Types::Record.new(
+          fields: val[1],
+          location: location(start_token: val[0], end_token: val[3])
+        )
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1100)
-  def _reduce_198(val, _values, result)
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1107)
+  def _reduce_189(val, _values, result)
             result = val[0]
 
     result
   end
 .,.,
 
-# reduce 199 omitted
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1110)
+  def _reduce_190(val, _values, result)
+            result = val[0].merge!(val[2])
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1115)
+  def _reduce_191(val, _values, result)
+            result = { value(val[0]) => val[2] }
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1118)
+  def _reduce_192(val, _values, result)
+            result = { value(val[0]) => val[2] }
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1121)
+  def _reduce_193(val, _values, result)
+            result = { value(val[0]) => val[2] }
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1124)
+  def _reduce_194(val, _values, result)
+            result = { value(val[0]) => val[1] }
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1127)
+  def _reduce_195(val, _values, result)
+            result = { value(val[0]).to_sym => val[2] }
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1130)
+  def _reduce_196(val, _values, result)
+            result = { value(val[0]) => val[2] }
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1133)
+  def _reduce_197(val, _values, result)
+            result = { value(val[0]) => val[2] }
+
+    result
+  end
+.,.,
+
+# reduce 198 omitted
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1139)
+  def _reduce_199(val, _values, result)
+            result = val[0]
+
+    result
+  end
+.,.,
 
 # reduce 200 omitted
 
@@ -3540,9 +3760,18 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1100)
 
 # reduce 202 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1107)
-  def _reduce_203(val, _values, result)
-            location = (val[0] || val[1] || val[2]).location + val[3].location
+# reduce 203 omitted
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1146)
+  def _reduce_204(val, _values, result)
+            case
+        when val[0]
+          location = val[0].location + val[3].location
+        when val[1]
+          location = val[1].location + val[3].location
+        else
+          location = location(start_token: val[2], end_pos: val[3].end_pos)
+        end
 
         params = val[0]&.value || [[], [], nil, [], {}, {}, nil]
 
@@ -3565,17 +3794,17 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1107)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1127)
-  def _reduce_204(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1173)
+  def _reduce_205(val, _values, result)
             result = LocatedValue.new(value: [val[0].value, nil], location: val[0].location)
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1132)
-  def _reduce_205(val, _values, result)
-            location = val[0].location + val[4].location
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1178)
+  def _reduce_206(val, _values, result)
+            location = location(start_token: val[0], end_pos: val[4].location.end_pos)
         type = Types::Function.new(
           required_positionals: val[1][0],
           optional_positionals: val[1][1],
@@ -3593,9 +3822,9 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1132)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1147)
-  def _reduce_206(val, _values, result)
-            location = val[0].location + val[1].location
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1193)
+  def _reduce_207(val, _values, result)
+            location = location(start_token: val[0], end_pos: val[1].location.end_pos)
         type = Types::Function.new(
           required_positionals: [],
           optional_positionals: [],
@@ -3613,17 +3842,17 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1147)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1164)
-  def _reduce_207(val, _values, result)
-            result = val[2]
-        result[0].unshift(val[0])
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1168)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1210)
   def _reduce_208(val, _values, result)
+            result = val[2]
+        result[0].unshift(val[0])
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1214)
+  def _reduce_209(val, _values, result)
             result = empty_params_result
         result[0].unshift(val[0])
 
@@ -3631,19 +3860,19 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1168)
   end
 .,.,
 
-# reduce 209 omitted
+# reduce 210 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1175)
-  def _reduce_210(val, _values, result)
-            result = val[2]
-        result[1].unshift(val[0])
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1179)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1221)
   def _reduce_211(val, _values, result)
+            result = val[2]
+        result[1].unshift(val[0])
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1225)
+  def _reduce_212(val, _values, result)
             result = empty_params_result
         result[1].unshift(val[0])
 
@@ -3651,19 +3880,19 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1179)
   end
 .,.,
 
-# reduce 212 omitted
+# reduce 213 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1186)
-  def _reduce_213(val, _values, result)
-            result = val[2]
-        result[2] = val[0]
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1190)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1232)
   def _reduce_214(val, _values, result)
+            result = val[2]
+        result[2] = val[0]
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1236)
+  def _reduce_215(val, _values, result)
             result = empty_params_result
         result[2] = val[0]
 
@@ -3671,19 +3900,19 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1190)
   end
 .,.,
 
-# reduce 215 omitted
+# reduce 216 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1197)
-  def _reduce_216(val, _values, result)
-            result = val[2]
-        result[3].unshift(val[0])
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1201)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1243)
   def _reduce_217(val, _values, result)
+            result = val[2]
+        result[3].unshift(val[0])
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1247)
+  def _reduce_218(val, _values, result)
             result = empty_params_result
         result[3].unshift(val[0])
 
@@ -3691,27 +3920,27 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1201)
   end
 .,.,
 
-# reduce 218 omitted
+# reduce 219 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1208)
-  def _reduce_219(val, _values, result)
-            result = empty_params_result
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1211)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1254)
   def _reduce_220(val, _values, result)
-            result = val[2]
-        result[4].merge!(val[0])
+            result = empty_params_result
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1215)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1257)
   def _reduce_221(val, _values, result)
+            result = val[2]
+        result[4].merge!(val[0])
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1261)
+  def _reduce_222(val, _values, result)
             result = empty_params_result
         result[4].merge!(val[0])
 
@@ -3719,8 +3948,8 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1215)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1219)
-  def _reduce_222(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1265)
+  def _reduce_223(val, _values, result)
             result = val[2]
         result[5].merge!(val[0])
 
@@ -3728,8 +3957,8 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1219)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1223)
-  def _reduce_223(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1269)
+  def _reduce_224(val, _values, result)
             result = empty_params_result
         result[5].merge!(val[0])
 
@@ -3737,8 +3966,8 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1223)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1227)
-  def _reduce_224(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1273)
+  def _reduce_225(val, _values, result)
             result = empty_params_result
         result[6] = val[0]
 
@@ -3746,120 +3975,111 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1227)
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1233)
-  def _reduce_225(val, _values, result)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1279)
+  def _reduce_226(val, _values, result)
             loc = val[0].location
-        if var_name = val[1]
-          loc = loc + var_name.location
+        if val[1]
+          var_name = value(val[1]).to_sym
+          var_loc = location(token: val[1])
+          loc = (loc + var_loc).with_children(optional: { name: var_loc })
         end
-        loc = loc.with_children(optional: { name: var_name&.location })
 
         result = Types::Function::Param.new(
           type: val[0],
-          name: var_name&.value&.to_sym,
+          name: var_name,
           location: loc
         )
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1248)
-  def _reduce_226(val, _values, result)
-            loc = val[0].location + val[1].location
-        if var_name = val[2]
-          loc = loc + var_name.location
-        end
-        loc = loc.with_children(optional: { name: var_name&.location })
-
-        result = Types::Function::Param.new(
-          type: val[1],
-          name: val[2]&.value&.to_sym,
-          location: loc
-        )
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1263)
-  def _reduce_227(val, _values, result)
-            loc = val[0].location + val[1].location
-        if var_name = val[2]
-          loc = loc + var_name.location
-        end
-        loc = loc.with_children(optional: { name: var_name&.location })
-
-        result = Types::Function::Param.new(
-          type: val[1],
-          name: val[2]&.value&.to_sym,
-          location: loc
-        )
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1278)
-  def _reduce_228(val, _values, result)
-            loc = val[0].location + val[1].location
-        if var_name = val[2]
-          loc = loc + var_name.location
-        end
-
-        loc = loc.with_children(optional: { name: var_name&.location })
-
-        param = Types::Function::Param.new(
-          type: val[1],
-          name: val[2]&.value&.to_sym,
-          location: loc
-        )
-        result = { val[0].value => param }
 
     result
   end
 .,.,
 
 module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1295)
+  def _reduce_227(val, _values, result)
+            if val[2]
+          name_range = tokenizer.range(val[2])
+          loc = location(start_token: val[0], end_pos: name_range.end)
+          name = value(val[2]).to_sym
+        else
+          loc = location(start_token: val[0], end_pos: val[1].location.end_pos)
+        end
+        loc = loc.with_children(optional: { name: name_range })
+
+        result = Types::Function::Param.new(type: val[1], name: name, location: loc)
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1309)
+  def _reduce_228(val, _values, result)
+            if val[2]
+          name_range = tokenizer.range(val[2])
+          loc = location(start_token: val[0], end_pos: name_range.end)
+          name = value(val[2]).to_sym
+        else
+          loc = location(start_token: val[0], end_pos: val[1].location.end_pos)
+        end
+        loc = loc.with_children(optional: { name: name_range })
+
+        result = Types::Function::Param.new(type: val[1], name: name, location: loc)
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1323)
   def _reduce_229(val, _values, result)
-            loc = val[0].location + val[2].location
-        if var_name = val[3]
-          loc = loc + var_name.location
+            if val[2]
+          name_range = tokenizer.range(val[2])
+          loc = location(start_token: val[0], end_pos: name_range.end)
+          name = value(val[2]).to_sym
+        else
+          loc = location(start_token: val[0], end_pos: val[1].location.end_pos)
         end
+        loc = loc.with_children(optional: { name: name_range })
 
-        loc = loc.with_children(optional: { name: var_name&.location })
-
-        param = Types::Function::Param.new(
-          type: val[2],
-          name: val[3]&.value&.to_sym,
-          location: loc
-        )
-        result = { val[1].value => param }
+        param = Types::Function::Param.new(type: val[1], name: name, location: loc)
+        result = { value(val[0]) => param }
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1312)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1338)
   def _reduce_230(val, _values, result)
-            loc = val[0].location + val[1].location
-        if var_name = val[2]
-          loc = loc + var_name.location
+            if val[3]
+          name_range = tokenizer.range(val[3])
+          loc = location(start_token: val[0], end_pos: name_range.end)
+          name = value(val[3]).to_sym
+        else
+          loc = location(start_token: val[0], end_pos: val[2].location.end_pos)
         end
+        loc = loc.with_children(optional: { name: name_range })
 
-        loc = loc.with_children(optional: { name: var_name&.location })
-
-        result = Types::Function::Param.new(
-          type: val[1],
-          name: val[2]&.value&.to_sym,
-          location: loc
-        )
+        param = Types::Function::Param.new(type: val[2], name: name, location: loc)
+        result = { value(val[1]) => param }
 
     result
   end
 .,.,
 
-# reduce 231 omitted
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1353)
+  def _reduce_231(val, _values, result)
+            if val[2]
+          name_range = tokenizer.range(val[2])
+          loc = location(start_token: val[0], end_pos: name_range.end)
+          name = value(val[2]).to_sym
+        else
+          loc = location(start_token: val[0], end_pos: val[1].location.end_pos)
+        end
+        loc = loc.with_children(optional: { name: name_range })
+
+        result = Types::Function::Param.new(type: val[1], name: name, location: loc)
+
+    result
+  end
+.,.,
 
 # reduce 232 omitted
 
@@ -3871,97 +4091,113 @@ module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1312)
 
 # reduce 236 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1331)
-  def _reduce_237(val, _values, result)
+# reduce 237 omitted
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1370)
+  def _reduce_238(val, _values, result)
             namespace = val[0]&.value || Namespace.empty
-        name = val[1].value.to_sym
+        name = value(val[1]).to_sym
         type_name = TypeName.new(namespace: namespace, name: name)
-        location = (loc0 = val[0]&.location) ? loc0 + val[1].location : val[1].location
+        loc0 = val[0]&.location
+        loc1 = location(token: val[1])
+        location = loc0 ? loc0 + loc1 : loc1
         result = LocatedValue.new(value: type_name, location: location)
 
     result
   end
 .,.,
-
-# reduce 238 omitted
 
 # reduce 239 omitted
 
 # reduce 240 omitted
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1343)
-  def _reduce_241(val, _values, result)
-            namespace = val[0]&.value || Namespace.empty
-        name = val[1].value.to_sym
-        type_name = TypeName.new(namespace: namespace, name: name)
-        location = (loc0 = val[0]&.location) ? loc0 + val[1].location : val[1].location
-        result = LocatedValue.new(value: type_name, location: location)
+# reduce 241 omitted
 
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1352)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1384)
   def _reduce_242(val, _values, result)
             namespace = val[0]&.value || Namespace.empty
-        name = val[1].value.to_sym
+        name = value(val[1]).to_sym
         type_name = TypeName.new(namespace: namespace, name: name)
-        location = (loc0 = val[0]&.location) ? loc0 + val[1].location : val[1].location
+        location =
+          if loc0 = val[0]&.location
+            location(start_pos: loc0.start_pos, end_token: val[1])
+          else
+            location(token: val[1])
+          end
         result = LocatedValue.new(value: type_name, location: location)
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1361)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1398)
   def _reduce_243(val, _values, result)
             namespace = val[0]&.value || Namespace.empty
-        name = val[1].value.to_sym
+        name = value(val[1]).to_sym
         type_name = TypeName.new(namespace: namespace, name: name)
-        location = (loc0 = val[0]&.location) ? loc0 + val[1].location : val[1].location
+        loc0 = val[0]&.location
+        loc1 = location(token: val[1])
+        location = loc0 ? loc0 + loc1 : loc1
         result = LocatedValue.new(value: type_name, location: location)
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1371)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1409)
   def _reduce_244(val, _values, result)
+            namespace = val[0]&.value || Namespace.empty
+        name = value(val[1]).to_sym
+        type_name = TypeName.new(namespace: namespace, name: name)
+        location =
+          if loc0 = val[0]&.location
+            location(start_pos: loc0.start_pos, end_token: val[1])
+          else
+            location(token: val[1])
+          end
+        result = LocatedValue.new(value: type_name, location: location)
+
+    result
+  end
+.,.,
+
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1423)
+  def _reduce_245(val, _values, result)
             result = nil
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1374)
-  def _reduce_245(val, _values, result)
-            result = LocatedValue.new(value: Namespace.root, location: val[0].location)
-
-    result
-  end
-.,.,
-
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1377)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1426)
   def _reduce_246(val, _values, result)
-            namespace = Namespace.parse(val[1].value).absolute!
-        result = LocatedValue.new(value: namespace, location: val[0].location + val[1].location)
+            result = LocatedValue.new(value: Namespace.root, buffer: buffer, range: tokenizer.range(val[0]))
 
     result
   end
 .,.,
 
-module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1381)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1429)
   def _reduce_247(val, _values, result)
-            namespace = Namespace.parse(val[0].value)
-        result = LocatedValue.new(value: namespace, location: val[0].location)
+            namespace = Namespace.parse(value(val[1])).absolute!
+        result = LocatedValue.new(value: namespace, buffer: buffer, range: tokenizer.start_pos(val[0])...tokenizer.end_pos(val[1]))
 
     result
   end
 .,.,
 
-# reduce 248 omitted
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1433)
+  def _reduce_248(val, _values, result)
+            namespace = Namespace.parse(value(val[0]))
+        result = LocatedValue.new(value: namespace, buffer: buffer, range: tokenizer.range(val[0]))
+
+    result
+  end
+.,.,
 
 # reduce 249 omitted
+
+# reduce 250 omitted
 
 def _reduce_none(val, _values, result)
   val[0]

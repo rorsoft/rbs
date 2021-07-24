@@ -10,6 +10,7 @@ require "tsort"
 require "strscan"
 
 require "rbs/char_scanner"
+require "rbs/lexer"
 require "rbs/errors"
 require "rbs/buffer"
 require "rbs/location"
