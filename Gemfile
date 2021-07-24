@@ -7,7 +7,7 @@ gemspec
 gem "rake"
 gem "test-unit"
 gem "rspec"
-gem "racc"
+gem "racc", path: "../racc"
 gem "rubocop"
 gem "rubocop-rubycw"
 gem "json"
