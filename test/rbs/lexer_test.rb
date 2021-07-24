@@ -23,35 +23,35 @@ class RBS::LexerTest < Test::Unit::TestCase
       assert_equal :NUMBER, tok
       assert_equal 1, lex.value(val)
       assert_equal 0, lex.start_pos(val)
-      assert_equal 0, lex.end_pos(val)
+      assert_equal 1, lex.end_pos(val)
     end
 
     lex.next_token.tap do |tok, val|
       assert_equal :PLUS, tok
       assert_equal "+", lex.value(val)
       assert_equal 2, lex.start_pos(val)
-      assert_equal 2, lex.end_pos(val)
+      assert_equal 3, lex.end_pos(val)
     end
 
     lex.next_token.tap do |tok, val|
       assert_equal :NUMBER, tok
       assert_equal 2, lex.value(val)
       assert_equal 4, lex.start_pos(val)
-      assert_equal 4, lex.end_pos(val)
+      assert_equal 5, lex.end_pos(val)
     end
 
     lex.next_token.tap do |tok, val|
       assert_equal :MINUS, tok
       assert_equal "-", lex.value(val)
       assert_equal 6, lex.start_pos(val)
-      assert_equal 6, lex.end_pos(val)
+      assert_equal 7, lex.end_pos(val)
     end
 
     lex.next_token.tap do |tok, val|
       assert_equal :VAR, tok
       assert_equal "abc", lex.value(val)
       assert_equal 8, lex.start_pos(val)
-      assert_equal 10, lex.end_pos(val)
+      assert_equal 11, lex.end_pos(val)
     end
 
     assert_nil lex.next_token
