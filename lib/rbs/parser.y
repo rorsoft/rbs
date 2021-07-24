@@ -1092,7 +1092,7 @@ rule
         result = [val[0]]
       }
     | type_list kCOMMA type {
-        result = val[0] + [val[2]]
+        result = val[0].push([val[2]])
       }
 
   record_type:
@@ -1851,7 +1851,7 @@ def next_token
     return [:tEOF, "$"]
   end
 
-  
+
   ret = tokenizer.next_token() or return
 
   if ret[0] == :tCOMMENT
