@@ -8,7 +8,7 @@ require 'racc/parser.rb'
 module RBS
   class Parser < Racc::Parser
 
-module_eval(<<'...end parser.y/module_eval...', 'parser.y', 1444)
+module_eval(<<'...end parser.y/module_eval...', File.join(__dir__, 'parser.y'), 1444)
 
 Types = RBS::Types
 Namespace = RBS::Namespace
@@ -283,17 +283,17 @@ class Lex < Lexer
   )
 
   skip(/\s+/)
-  token(:tCOMMENT, /#(( *)|( ?(?<string>.*)))\n/)
+  token(:tCOMMENT, /#(?:(?: *)|(?: ?(?:.*)))\n/)
   token_invoke(:quoted_ident, /`[a-zA-Z_]\w*`/)
-  token_invoke(:quoted_method, /`(\\`|[^` :])+`/)
+  token_invoke(:quoted_method, /`(?:\\`|[^` :])+`/)
   token_invoke(:annotation, ANNOTATION_RE)
   token(:kSELFQ, "self?")
-  token(:tWRITE_ATTR, /(([a-zA-Z]\w*)|(_\w+))=/)
+  token(:tWRITE_ATTR, /(?:(?:[a-zA-Z]\w*)|(?:_\w+))=/)
   token_invoke(:keyword, KEYWORDS_RE)
-  token_invoke(:symbol, /:((@{,2}|\$)?\w+(\?|\!)?|[|&\/%~`^]|<=>|={2,3}|=~|[<>]{2}|[<>]=?|[-+]@?|\*{1,2}|\[\]=?|![=~]?)\b?/)
+  token_invoke(:symbol, /:(?:(?:@{,2}|\$)?\w+(?:\?|\!)?|[|&\/%~`^]|<=>|={2,3}|=~|[<>]{2}|[<>]=?|[-+]@?|\*{1,2}|\[\]=?|![=~]?)\b?/)
   token_invoke(:integer, /[+-]?\d[\d_]*/)
   token_invoke(:punct, PUNCTS_RE)
-  token(:tNAMESPACE, /(::)?([A-Z]\w*::)+/)
+  token(:tNAMESPACE, /(?:::)?(?:[A-Z]\w*::)+/)
   token_invoke(:lkeyword_arg, /[a-z_]\w*:/)
   token_invoke(:lkeyword_q_e_arg, /[a-z_]\w*[?!]:/)
   token_invoke(:ukeyword_arg, /[A-Z]\w*:/)
@@ -306,8 +306,8 @@ class Lex < Lexer
   token(:tLIDENT, /[a-z]\w*\b/)
   token(:tUNDERSCOREIDENT, /_[a-z]\w*\b/)
   token(:tPARAMNAME, /_[\w_]*\b/)
-  token_invoke(:double_quoted_string, /"(\\"|[^"])*"/)
-  token_invoke(:single_quoted_string, /'(\\'|[^'])*'/)
+  token_invoke(:double_quoted_string, /"(?:\\"|[^"])*"/)
+  token_invoke(:single_quoted_string, /'(?:\\'|[^'])*'/)
 
   def quoted_ident(string)
     string[0] = ""
@@ -418,7 +418,6 @@ def next_token
     pos = tokenizer.scanner.char_pos
     return [:tEOF, "$"]
   end
-
 
   ret = tokenizer.next_token() or return
 
@@ -1958,7 +1957,7 @@ Racc_debug_parser = false
 
 # reduce 0 omitted
 
-module_eval(<<'.,.,', 'parser.y', 29)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 29)
   def _reduce_1(val, _values, result)
             result = val[1]
 
@@ -1966,7 +1965,7 @@ module_eval(<<'.,.,', 'parser.y', 29)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 32)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 32)
   def _reduce_2(val, _values, result)
             result = val[1]
 
@@ -1974,7 +1973,7 @@ module_eval(<<'.,.,', 'parser.y', 32)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 35)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 35)
   def _reduce_3(val, _values, result)
             result = val[1]
 
@@ -1986,14 +1985,14 @@ module_eval(<<'.,.,', 'parser.y', 35)
 
 # reduce 5 omitted
 
-module_eval(<<'.,.,', 'parser.y', 41)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 41)
   def _reduce_6(val, _values, result)
      result = []
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 43)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 43)
   def _reduce_7(val, _values, result)
             result = val[0].push(val[1])
 
@@ -2013,28 +2012,28 @@ module_eval(<<'.,.,', 'parser.y', 43)
 
 # reduce 13 omitted
 
-module_eval(<<'.,.,', 'parser.y', 54)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 54)
   def _reduce_14(val, _values, result)
      start_new_variables_scope
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 55)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 55)
   def _reduce_15(val, _values, result)
      start_merged_variables_scope
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 58)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 58)
   def _reduce_16(val, _values, result)
      result = []
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 60)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 60)
   def _reduce_17(val, _values, result)
             result = val[1].unshift(Annotation.new(string: value(val[0]), location: location(token: val[0])))
 
@@ -2042,7 +2041,7 @@ module_eval(<<'.,.,', 'parser.y', 60)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 65)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 65)
   def _reduce_18(val, _values, result)
             reset_variable_scope
 
@@ -2072,14 +2071,14 @@ module_eval(<<'.,.,', 'parser.y', 65)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 91)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 91)
   def _reduce_19(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 93)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 93)
   def _reduce_20(val, _values, result)
             loc = val[1].location.with_children(
           required: { name: val[1].range },
@@ -2095,7 +2094,7 @@ module_eval(<<'.,.,', 'parser.y', 93)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 104)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 104)
   def _reduce_21(val, _values, result)
             loc = location(start_pos: val[1].location.start_pos, end_token: val[4]).with_children(
           required: { name: val[1].range },
@@ -2112,7 +2111,7 @@ module_eval(<<'.,.,', 'parser.y', 104)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 118)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 118)
   def _reduce_22(val, _values, result)
             reset_variable_scope
 
@@ -2155,7 +2154,7 @@ module_eval(<<'.,.,', 'parser.y', 118)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 156)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 156)
   def _reduce_23(val, _values, result)
             reset_variable_scope
 
@@ -2188,14 +2187,14 @@ module_eval(<<'.,.,', 'parser.y', 156)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 185)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 185)
   def _reduce_24(val, _values, result)
      result = LocatedValue.new(value: [], location: nil)
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 187)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 187)
   def _reduce_25(val, _values, result)
             result = LocatedValue.new(value: val[1], location: location(token: val[0]))
 
@@ -2203,7 +2202,7 @@ module_eval(<<'.,.,', 'parser.y', 187)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 192)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 192)
   def _reduce_26(val, _values, result)
             result = [val[0]]
 
@@ -2211,7 +2210,7 @@ module_eval(<<'.,.,', 'parser.y', 192)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 195)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 195)
   def _reduce_27(val, _values, result)
             result = val[0].push(val[2])
 
@@ -2219,7 +2218,7 @@ module_eval(<<'.,.,', 'parser.y', 195)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 200)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 200)
   def _reduce_28(val, _values, result)
             name = val[0].value
         args = val[2]
@@ -2242,7 +2241,7 @@ module_eval(<<'.,.,', 'parser.y', 200)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 218)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 218)
   def _reduce_29(val, _values, result)
             name = val[0].value
         args = []
@@ -2264,14 +2263,14 @@ module_eval(<<'.,.,', 'parser.y', 218)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 236)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 236)
   def _reduce_30(val, _values, result)
      result = []
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 238)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 238)
   def _reduce_31(val, _values, result)
             result = val[0].push(val[1])
 
@@ -2291,7 +2290,7 @@ module_eval(<<'.,.,', 'parser.y', 238)
 
 # reduce 37 omitted
 
-module_eval(<<'.,.,', 'parser.y', 249)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 249)
   def _reduce_38(val, _values, result)
             result = Members::Public.new(location: location(token: val[0]))
 
@@ -2299,7 +2298,7 @@ module_eval(<<'.,.,', 'parser.y', 249)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 252)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 252)
   def _reduce_39(val, _values, result)
             result = Members::Private.new(location: location(token: val[0]))
 
@@ -2311,21 +2310,21 @@ module_eval(<<'.,.,', 'parser.y', 252)
 
 # reduce 41 omitted
 
-module_eval(<<'.,.,', 'parser.y', 258)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 258)
   def _reduce_42(val, _values, result)
      result = LocatedValue.new(value: :instance, location: nil)
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 259)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 259)
   def _reduce_43(val, _values, result)
      result = LocatedValue.new(value: :singleton, location: location(start_token: val[0], end_token: val[1]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 263)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 263)
   def _reduce_44(val, _values, result)
             location = location(start_token: val[1], end_pos: val[4].location.end_pos)
         name_loc, colon_loc = split_kw_loc(location(token: val[3]))
@@ -2345,7 +2344,7 @@ module_eval(<<'.,.,', 'parser.y', 263)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 278)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 278)
   def _reduce_45(val, _values, result)
             location = location(start_token: val[1], end_pos: val[6].location.end_pos)
         ivar_loc = val[4]&.location
@@ -2376,7 +2375,7 @@ module_eval(<<'.,.,', 'parser.y', 278)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 304)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 304)
   def _reduce_46(val, _values, result)
             location = location(start_token: val[1], end_pos: val[4].location.end_pos)
         name_loc, colon_loc = split_kw_loc(location(token: val[3]))
@@ -2396,7 +2395,7 @@ module_eval(<<'.,.,', 'parser.y', 304)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 319)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 319)
   def _reduce_47(val, _values, result)
             location = location(start_token: val[1], end_pos: val[6].location.end_pos)
         ivar_loc = val[4]&.location
@@ -2428,7 +2427,7 @@ module_eval(<<'.,.,', 'parser.y', 319)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 346)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 346)
   def _reduce_48(val, _values, result)
             location = location(start_token: val[1], end_pos: val[4].location.end_pos)
         name_loc, colon_loc = split_kw_loc(location(token: val[3]))
@@ -2449,7 +2448,7 @@ module_eval(<<'.,.,', 'parser.y', 346)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 362)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 362)
   def _reduce_49(val, _values, result)
             location = location(start_token: val[1], end_pos: val[6].location.end_pos)
         ivar_loc = val[4]&.location
@@ -2481,21 +2480,21 @@ module_eval(<<'.,.,', 'parser.y', 362)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 390)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 390)
   def _reduce_50(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 391)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 391)
   def _reduce_51(val, _values, result)
      result = LocatedValue.new(value: false, location: location(start_token: val[0], end_token: val[1]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 393)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 393)
   def _reduce_52(val, _values, result)
             result = LocatedValue.new(
           value: LocatedValue.new(value: value(val[1]).to_sym, location: location(token: val[1])),
@@ -2506,7 +2505,7 @@ module_eval(<<'.,.,', 'parser.y', 393)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 401)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 401)
   def _reduce_53(val, _values, result)
             location = location(start_token: val[0], end_pos: val[2].location.end_pos).with_children(
           required: { name: tokenizer.range(val[0]), colon: tokenizer.range(val[1]) },
@@ -2524,7 +2523,7 @@ module_eval(<<'.,.,', 'parser.y', 401)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 414)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 414)
   def _reduce_54(val, _values, result)
             type = val[2]
 
@@ -2552,7 +2551,7 @@ module_eval(<<'.,.,', 'parser.y', 414)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 437)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 437)
   def _reduce_55(val, _values, result)
           type = val[4]
 
@@ -2580,7 +2579,7 @@ module_eval(<<'.,.,', 'parser.y', 437)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 462)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 462)
   def _reduce_56(val, _values, result)
             reset_variable_scope
 
@@ -2602,14 +2601,14 @@ module_eval(<<'.,.,', 'parser.y', 462)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 480)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 480)
   def _reduce_57(val, _values, result)
      result = []
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 482)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 482)
   def _reduce_58(val, _values, result)
             result = val[0].push(val[1])
 
@@ -2617,7 +2616,7 @@ module_eval(<<'.,.,', 'parser.y', 482)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 487)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 487)
   def _reduce_59(val, _values, result)
             unless val[0].kind == :instance
           raise SemanticsError.new("Interface cannot have singleton method", subject: val[0], location: val[0].location)
@@ -2633,7 +2632,7 @@ module_eval(<<'.,.,', 'parser.y', 487)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 498)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 498)
   def _reduce_60(val, _values, result)
             unless val[0].name.interface?
           raise SemanticsError.new("Interface should include an interface", subject: val[0], location: val[0].location)
@@ -2647,7 +2646,7 @@ module_eval(<<'.,.,', 'parser.y', 498)
 
 # reduce 61 omitted
 
-module_eval(<<'.,.,', 'parser.y', 508)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 508)
   def _reduce_62(val, _values, result)
             if val[2].value.alias?
           raise SemanticsError.new("Should include module or interface", subject: val[2].value, location: val[2].location)
@@ -2668,7 +2667,7 @@ module_eval(<<'.,.,', 'parser.y', 508)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 524)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 524)
   def _reduce_63(val, _values, result)
             if val[2].value.alias?
           raise SemanticsError.new("Should include module or interface", subject: val[2].value, location: val[2].location)
@@ -2689,7 +2688,7 @@ module_eval(<<'.,.,', 'parser.y', 524)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 542)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 542)
   def _reduce_64(val, _values, result)
             if val[2].value.alias?
           raise SemanticsError.new("Should extend module or interface", subject: val[2].value, location: val[2].location)
@@ -2710,7 +2709,7 @@ module_eval(<<'.,.,', 'parser.y', 542)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 558)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 558)
   def _reduce_65(val, _values, result)
             if val[2].value.alias?
           raise SemanticsError.new("Should extend module or interface", subject: val[2].value, location: val[2].location)
@@ -2731,7 +2730,7 @@ module_eval(<<'.,.,', 'parser.y', 558)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 576)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 576)
   def _reduce_66(val, _values, result)
             unless val[2].value.class?
           raise SemanticsError.new("Should prepend module", subject: val[2].value, location: val[2].location)
@@ -2752,7 +2751,7 @@ module_eval(<<'.,.,', 'parser.y', 576)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 592)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 592)
   def _reduce_67(val, _values, result)
             unless val[2].value.class?
           raise SemanticsError.new("Should prepend module", subject: val[2].value, location: val[2].location)
@@ -2773,14 +2772,14 @@ module_eval(<<'.,.,', 'parser.y', 592)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 609)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 609)
   def _reduce_68(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 611)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 611)
   def _reduce_69(val, _values, result)
             RBS.logger.warn "`overload def` syntax is deprecated. Use `...` syntax instead."
         result = val[0]
@@ -2789,7 +2788,7 @@ module_eval(<<'.,.,', 'parser.y', 611)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 617)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 617)
   def _reduce_70(val, _values, result)
             kdef = val[3]
         location = location(start_token: kdef, end_pos: val[6].last.location.end_pos)
@@ -2829,7 +2828,7 @@ module_eval(<<'.,.,', 'parser.y', 617)
 
 # reduce 71 omitted
 
-module_eval(<<'.,.,', 'parser.y', 652)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 652)
   def _reduce_72(val, _values, result)
             RBS.logger.warn "`incompatible` method attribute is deprecated and ignored."
 
@@ -2837,42 +2836,42 @@ module_eval(<<'.,.,', 'parser.y', 652)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 656)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 656)
   def _reduce_73(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 657)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 657)
   def _reduce_74(val, _values, result)
      result = LocatedValue.new(value: :singleton, location: location(start_token: val[0], end_token: val[1]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 658)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 658)
   def _reduce_75(val, _values, result)
      result = LocatedValue.new(value: :singleton_instance, location: location(start_token: val[0], end_token: val[1]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 661)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 661)
   def _reduce_76(val, _values, result)
      result = [val[0]]
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 662)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 662)
   def _reduce_77(val, _values, result)
      result = [LocatedValue.new(value: :dot3, location: location(token: val[0]))]
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 664)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 664)
   def _reduce_78(val, _values, result)
             result = val[2].unshift(val[0])
 
@@ -2880,7 +2879,7 @@ module_eval(<<'.,.,', 'parser.y', 664)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 669)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 669)
   def _reduce_79(val, _values, result)
             reset_variable_scope
 
@@ -2903,14 +2902,14 @@ module_eval(<<'.,.,', 'parser.y', 669)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 688)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 688)
   def _reduce_80(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 690)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 690)
   def _reduce_81(val, _values, result)
             result = LocatedValue.new(value: val[1], location: location(start_token: val[0], end_token: val[2]))
 
@@ -2918,7 +2917,7 @@ module_eval(<<'.,.,', 'parser.y', 690)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 695)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 695)
   def _reduce_82(val, _values, result)
             block = Types::Block.new(type: val[1].value, required: true)
         result = LocatedValue.new(value: block, location: location(start_token: val[0], end_token: val[2]))
@@ -2927,7 +2926,7 @@ module_eval(<<'.,.,', 'parser.y', 695)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 699)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 699)
   def _reduce_83(val, _values, result)
             block = Types::Block.new(type: val[2].value, required: false)
         result = LocatedValue.new(value: block, location: location(start_token: val[0], end_token: val[3]))
@@ -2936,7 +2935,7 @@ module_eval(<<'.,.,', 'parser.y', 699)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 705)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 705)
   def _reduce_84(val, _values, result)
             start_pos = tokenizer.start_pos(val[0])
         end_pos = tokenizer.end_pos(val[0])
@@ -2948,7 +2947,7 @@ module_eval(<<'.,.,', 'parser.y', 705)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 712)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 712)
   def _reduce_85(val, _values, result)
             result = LocatedValue.new(value: val[0].value.to_sym,
                                   location: val[0].value)
@@ -2957,7 +2956,7 @@ module_eval(<<'.,.,', 'parser.y', 712)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 718)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 718)
   def _reduce_86(val, _values, result)
             result = LocatedValue.new(value: value(val[0]), buffer: buffer, range: tokenizer.range(val[0]))
 
@@ -2965,7 +2964,7 @@ module_eval(<<'.,.,', 'parser.y', 718)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 721)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 721)
   def _reduce_87(val, _values, result)
             result = LocatedValue.new(value: value(val[0]), buffer: buffer, range: tokenizer.range(val[0]))
 
@@ -2973,7 +2972,7 @@ module_eval(<<'.,.,', 'parser.y', 721)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 724)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 724)
   def _reduce_88(val, _values, result)
             loc0 = location(token: val[0])
         loc1 = location(token: val[1])
@@ -2991,7 +2990,7 @@ module_eval(<<'.,.,', 'parser.y', 724)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 737)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 737)
   def _reduce_89(val, _values, result)
             loc0 = location(token: val[0])
         loc1 = location(token: val[1])
@@ -3105,14 +3104,14 @@ module_eval(<<'.,.,', 'parser.y', 737)
 
 # reduce 137 omitted
 
-module_eval(<<'.,.,', 'parser.y', 762)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 762)
   def _reduce_138(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 764)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 764)
   def _reduce_139(val, _values, result)
             val[1].each {|p| insert_bound_variable(p.name) }
 
@@ -3122,7 +3121,7 @@ module_eval(<<'.,.,', 'parser.y', 764)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 771)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 771)
   def _reduce_140(val, _values, result)
             result = Declarations::ModuleTypeParams.new()
         result.add(val[0])
@@ -3131,7 +3130,7 @@ module_eval(<<'.,.,', 'parser.y', 771)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 775)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 775)
   def _reduce_141(val, _values, result)
             result = val[0].add(val[2])
 
@@ -3139,7 +3138,7 @@ module_eval(<<'.,.,', 'parser.y', 775)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 780)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 780)
   def _reduce_142(val, _values, result)
             loc = case
               when l0 = val[0].location
@@ -3164,49 +3163,49 @@ module_eval(<<'.,.,', 'parser.y', 780)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 801)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 801)
   def _reduce_143(val, _values, result)
      result = LocatedValue.new(value: :invariant, location: nil)
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 802)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 802)
   def _reduce_144(val, _values, result)
      result = LocatedValue.new(value: :covariant, location: location(token: val[0]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 803)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 803)
   def _reduce_145(val, _values, result)
      result = LocatedValue.new(value: :contravariant, location: location(token: val[0]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 806)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 806)
   def _reduce_146(val, _values, result)
      result = LocatedValue.new(value: false, location: nil)
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 807)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 807)
   def _reduce_147(val, _values, result)
      result = LocatedValue.new(value: true, location: location(token: val[0]))
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 810)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 810)
   def _reduce_148(val, _values, result)
      result = nil
     result
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 812)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 812)
   def _reduce_149(val, _values, result)
             val[1].each {|var| insert_bound_variable(var) }
 
@@ -3217,7 +3216,7 @@ module_eval(<<'.,.,', 'parser.y', 812)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 820)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 820)
   def _reduce_150(val, _values, result)
             result = [value(val[0]).to_sym]
 
@@ -3225,7 +3224,7 @@ module_eval(<<'.,.,', 'parser.y', 820)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 823)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 823)
   def _reduce_151(val, _values, result)
             result = val[0].push(value(val[2]).to_sym)
 
@@ -3233,7 +3232,7 @@ module_eval(<<'.,.,', 'parser.y', 823)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 828)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 828)
   def _reduce_152(val, _values, result)
             location = location(start_token: val[1], end_pos: val[3].location.end_pos)
         location = location.with_children(
@@ -3253,7 +3252,7 @@ module_eval(<<'.,.,', 'parser.y', 828)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 843)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 843)
   def _reduce_153(val, _values, result)
             location = location(start_token: val[1], end_pos: val[7].location.end_pos)
         location = location.with_children(
@@ -3276,7 +3275,7 @@ module_eval(<<'.,.,', 'parser.y', 843)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 863)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 863)
   def _reduce_154(val, _values, result)
             location = location(start_token: val[1], end_pos: val[4].location.end_pos)
         location = location.with_children(
@@ -3294,7 +3293,7 @@ module_eval(<<'.,.,', 'parser.y', 863)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 878)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 878)
   def _reduce_155(val, _values, result)
             location = val[0].location + val[2].location
         location = location.with_children(
@@ -3309,7 +3308,7 @@ module_eval(<<'.,.,', 'parser.y', 878)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 888)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 888)
   def _reduce_156(val, _values, result)
             if val[0]
           lhs_loc = location(start_pos: val[0].location.start_pos, end_token: val[1])
@@ -3334,7 +3333,7 @@ module_eval(<<'.,.,', 'parser.y', 888)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 910)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 910)
   def _reduce_157(val, _values, result)
             location = location(start_token: val[0], end_pos: val[2].location.end_pos)
         location = location.with_children(
@@ -3351,7 +3350,7 @@ module_eval(<<'.,.,', 'parser.y', 910)
 
 # reduce 158 omitted
 
-module_eval(<<'.,.,', 'parser.y', 923)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 923)
   def _reduce_159(val, _values, result)
             types = case l = val[0]
                 when Types::Union
@@ -3366,7 +3365,7 @@ module_eval(<<'.,.,', 'parser.y', 923)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 933)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 933)
   def _reduce_160(val, _values, result)
             types = case l = val[0]
                 when Types::Intersection
@@ -3382,7 +3381,7 @@ module_eval(<<'.,.,', 'parser.y', 933)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 946)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 946)
   def _reduce_161(val, _values, result)
             result = Types::Bases::Void.new(location: location(token: val[0]))
 
@@ -3390,7 +3389,7 @@ module_eval(<<'.,.,', 'parser.y', 946)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 949)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 949)
   def _reduce_162(val, _values, result)
             loc = location(token: val[0])
         RBS.logger.warn "`any` type is deprecated. Use `untyped` instead. (#{loc.to_s})"
@@ -3400,7 +3399,7 @@ module_eval(<<'.,.,', 'parser.y', 949)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 954)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 954)
   def _reduce_163(val, _values, result)
             result = Types::Bases::Any.new(location: location(token: val[0]))
 
@@ -3408,7 +3407,7 @@ module_eval(<<'.,.,', 'parser.y', 954)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 957)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 957)
   def _reduce_164(val, _values, result)
             result = Types::Bases::Bool.new(location: location(token: val[0]))
 
@@ -3416,7 +3415,7 @@ module_eval(<<'.,.,', 'parser.y', 957)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 960)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 960)
   def _reduce_165(val, _values, result)
             result = Types::Bases::Nil.new(location: location(token: val[0]))
 
@@ -3424,7 +3423,7 @@ module_eval(<<'.,.,', 'parser.y', 960)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 963)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 963)
   def _reduce_166(val, _values, result)
             result = Types::Bases::Top.new(location: location(token: val[0]))
 
@@ -3432,7 +3431,7 @@ module_eval(<<'.,.,', 'parser.y', 963)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 966)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 966)
   def _reduce_167(val, _values, result)
             result = Types::Bases::Bottom.new(location: location(token: val[0]))
 
@@ -3440,7 +3439,7 @@ module_eval(<<'.,.,', 'parser.y', 966)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 969)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 969)
   def _reduce_168(val, _values, result)
             result = Types::Bases::Self.new(location: location(token: val[0]))
 
@@ -3448,7 +3447,7 @@ module_eval(<<'.,.,', 'parser.y', 969)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 972)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 972)
   def _reduce_169(val, _values, result)
             loc = location(token: val[0])
         result = Types::Optional.new(
@@ -3460,7 +3459,7 @@ module_eval(<<'.,.,', 'parser.y', 972)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 979)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 979)
   def _reduce_170(val, _values, result)
             result = Types::Bases::Instance.new(location: location(token: val[0]))
 
@@ -3468,7 +3467,7 @@ module_eval(<<'.,.,', 'parser.y', 979)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 982)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 982)
   def _reduce_171(val, _values, result)
             result = Types::Bases::Class.new(location: location(token: val[0]))
 
@@ -3476,7 +3475,7 @@ module_eval(<<'.,.,', 'parser.y', 982)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 985)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 985)
   def _reduce_172(val, _values, result)
             result = Types::Literal.new(literal: true, location: location(token: val[0]))
 
@@ -3484,7 +3483,7 @@ module_eval(<<'.,.,', 'parser.y', 985)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 988)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 988)
   def _reduce_173(val, _values, result)
             result = Types::Literal.new(literal: false, location: location(token: val[0]))
 
@@ -3492,7 +3491,7 @@ module_eval(<<'.,.,', 'parser.y', 988)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 991)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 991)
   def _reduce_174(val, _values, result)
             result = Types::Literal.new(literal: value(val[0]), location: location(token: val[0]))
 
@@ -3500,7 +3499,7 @@ module_eval(<<'.,.,', 'parser.y', 991)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 994)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 994)
   def _reduce_175(val, _values, result)
             result = Types::Literal.new(literal: value(val[0]), location: location(token: val[0]))
 
@@ -3508,7 +3507,7 @@ module_eval(<<'.,.,', 'parser.y', 994)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 997)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 997)
   def _reduce_176(val, _values, result)
             result = Types::Literal.new(literal: value(val[0]), location: location(token: val[0]))
 
@@ -3516,7 +3515,7 @@ module_eval(<<'.,.,', 'parser.y', 997)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1000)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1000)
   def _reduce_177(val, _values, result)
             name = val[0].value
         args = []
@@ -3551,7 +3550,7 @@ module_eval(<<'.,.,', 'parser.y', 1000)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1030)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1030)
   def _reduce_178(val, _values, result)
             name = val[0].value
         args = val[2]
@@ -3582,7 +3581,7 @@ module_eval(<<'.,.,', 'parser.y', 1030)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1056)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1056)
   def _reduce_179(val, _values, result)
             location = location(range: tokenizer.start_pos(val[0])...tokenizer.end_pos(val[1]))
         result = Types::Tuple.new(types: [], location: location)
@@ -3591,7 +3590,7 @@ module_eval(<<'.,.,', 'parser.y', 1056)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1060)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1060)
   def _reduce_180(val, _values, result)
             location = location(range: tokenizer.start_pos(val[0])...tokenizer.end_pos(val[3]))
         types = val[1]
@@ -3601,7 +3600,7 @@ module_eval(<<'.,.,', 'parser.y', 1060)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1065)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1065)
   def _reduce_181(val, _values, result)
             type = val[1].dup
         loc = location(start_token: val[0], end_token: val[2])
@@ -3614,7 +3613,7 @@ module_eval(<<'.,.,', 'parser.y', 1065)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1073)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1073)
   def _reduce_182(val, _values, result)
             location = location(start_token: val[0], end_token: val[3])
         location = location.with_children(
@@ -3626,7 +3625,7 @@ module_eval(<<'.,.,', 'parser.y', 1073)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1080)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1080)
   def _reduce_183(val, _values, result)
             type, block = val[1].value
         location = location(start_token: val[0], end_pos: val[1].location.end_pos)
@@ -3636,7 +3635,7 @@ module_eval(<<'.,.,', 'parser.y', 1080)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1085)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1085)
   def _reduce_184(val, _values, result)
             result = Types::Optional.new(type: val[0], location: location(start_pos: val[0].location.start_pos, end_token: val[1]))
 
@@ -3646,7 +3645,7 @@ module_eval(<<'.,.,', 'parser.y', 1085)
 
 # reduce 185 omitted
 
-module_eval(<<'.,.,', 'parser.y', 1091)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1091)
   def _reduce_186(val, _values, result)
             result = [val[0]]
 
@@ -3654,7 +3653,7 @@ module_eval(<<'.,.,', 'parser.y', 1091)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1094)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1094)
   def _reduce_187(val, _values, result)
             result = val[0].push([val[2]])
 
@@ -3662,7 +3661,7 @@ module_eval(<<'.,.,', 'parser.y', 1094)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1099)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1099)
   def _reduce_188(val, _values, result)
             result = Types::Record.new(
           fields: val[1],
@@ -3673,7 +3672,7 @@ module_eval(<<'.,.,', 'parser.y', 1099)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1107)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1107)
   def _reduce_189(val, _values, result)
             result = val[0]
 
@@ -3681,7 +3680,7 @@ module_eval(<<'.,.,', 'parser.y', 1107)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1110)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1110)
   def _reduce_190(val, _values, result)
             result = val[0].merge!(val[2])
 
@@ -3689,7 +3688,7 @@ module_eval(<<'.,.,', 'parser.y', 1110)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1115)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1115)
   def _reduce_191(val, _values, result)
             result = { value(val[0]) => val[2] }
 
@@ -3697,7 +3696,7 @@ module_eval(<<'.,.,', 'parser.y', 1115)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1118)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1118)
   def _reduce_192(val, _values, result)
             result = { value(val[0]) => val[2] }
 
@@ -3705,7 +3704,7 @@ module_eval(<<'.,.,', 'parser.y', 1118)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1121)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1121)
   def _reduce_193(val, _values, result)
             result = { value(val[0]) => val[2] }
 
@@ -3713,7 +3712,7 @@ module_eval(<<'.,.,', 'parser.y', 1121)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1124)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1124)
   def _reduce_194(val, _values, result)
             result = { value(val[0]) => val[1] }
 
@@ -3721,7 +3720,7 @@ module_eval(<<'.,.,', 'parser.y', 1124)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1127)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1127)
   def _reduce_195(val, _values, result)
             result = { value(val[0]).to_sym => val[2] }
 
@@ -3729,7 +3728,7 @@ module_eval(<<'.,.,', 'parser.y', 1127)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1130)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1130)
   def _reduce_196(val, _values, result)
             result = { value(val[0]) => val[2] }
 
@@ -3737,7 +3736,7 @@ module_eval(<<'.,.,', 'parser.y', 1130)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1133)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1133)
   def _reduce_197(val, _values, result)
             result = { value(val[0]) => val[2] }
 
@@ -3747,7 +3746,7 @@ module_eval(<<'.,.,', 'parser.y', 1133)
 
 # reduce 198 omitted
 
-module_eval(<<'.,.,', 'parser.y', 1139)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1139)
   def _reduce_199(val, _values, result)
             result = val[0]
 
@@ -3763,7 +3762,7 @@ module_eval(<<'.,.,', 'parser.y', 1139)
 
 # reduce 203 omitted
 
-module_eval(<<'.,.,', 'parser.y', 1146)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1146)
   def _reduce_204(val, _values, result)
             case
         when val[0]
@@ -3795,7 +3794,7 @@ module_eval(<<'.,.,', 'parser.y', 1146)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1173)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1173)
   def _reduce_205(val, _values, result)
             result = LocatedValue.new(value: [val[0].value, nil], location: val[0].location)
 
@@ -3803,7 +3802,7 @@ module_eval(<<'.,.,', 'parser.y', 1173)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1178)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1178)
   def _reduce_206(val, _values, result)
             location = location(start_token: val[0], end_pos: val[4].location.end_pos)
         type = Types::Function.new(
@@ -3823,7 +3822,7 @@ module_eval(<<'.,.,', 'parser.y', 1178)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1193)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1193)
   def _reduce_207(val, _values, result)
             location = location(start_token: val[0], end_pos: val[1].location.end_pos)
         type = Types::Function.new(
@@ -3843,7 +3842,7 @@ module_eval(<<'.,.,', 'parser.y', 1193)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1210)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1210)
   def _reduce_208(val, _values, result)
             result = val[2]
         result[0].unshift(val[0])
@@ -3852,7 +3851,7 @@ module_eval(<<'.,.,', 'parser.y', 1210)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1214)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1214)
   def _reduce_209(val, _values, result)
             result = empty_params_result
         result[0].unshift(val[0])
@@ -3863,7 +3862,7 @@ module_eval(<<'.,.,', 'parser.y', 1214)
 
 # reduce 210 omitted
 
-module_eval(<<'.,.,', 'parser.y', 1221)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1221)
   def _reduce_211(val, _values, result)
             result = val[2]
         result[1].unshift(val[0])
@@ -3872,7 +3871,7 @@ module_eval(<<'.,.,', 'parser.y', 1221)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1225)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1225)
   def _reduce_212(val, _values, result)
             result = empty_params_result
         result[1].unshift(val[0])
@@ -3883,7 +3882,7 @@ module_eval(<<'.,.,', 'parser.y', 1225)
 
 # reduce 213 omitted
 
-module_eval(<<'.,.,', 'parser.y', 1232)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1232)
   def _reduce_214(val, _values, result)
             result = val[2]
         result[2] = val[0]
@@ -3892,7 +3891,7 @@ module_eval(<<'.,.,', 'parser.y', 1232)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1236)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1236)
   def _reduce_215(val, _values, result)
             result = empty_params_result
         result[2] = val[0]
@@ -3903,7 +3902,7 @@ module_eval(<<'.,.,', 'parser.y', 1236)
 
 # reduce 216 omitted
 
-module_eval(<<'.,.,', 'parser.y', 1243)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1243)
   def _reduce_217(val, _values, result)
             result = val[2]
         result[3].unshift(val[0])
@@ -3912,7 +3911,7 @@ module_eval(<<'.,.,', 'parser.y', 1243)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1247)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1247)
   def _reduce_218(val, _values, result)
             result = empty_params_result
         result[3].unshift(val[0])
@@ -3923,7 +3922,7 @@ module_eval(<<'.,.,', 'parser.y', 1247)
 
 # reduce 219 omitted
 
-module_eval(<<'.,.,', 'parser.y', 1254)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1254)
   def _reduce_220(val, _values, result)
             result = empty_params_result
 
@@ -3931,7 +3930,7 @@ module_eval(<<'.,.,', 'parser.y', 1254)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1257)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1257)
   def _reduce_221(val, _values, result)
             result = val[2]
         result[4].merge!(val[0])
@@ -3940,7 +3939,7 @@ module_eval(<<'.,.,', 'parser.y', 1257)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1261)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1261)
   def _reduce_222(val, _values, result)
             result = empty_params_result
         result[4].merge!(val[0])
@@ -3949,7 +3948,7 @@ module_eval(<<'.,.,', 'parser.y', 1261)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1265)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1265)
   def _reduce_223(val, _values, result)
             result = val[2]
         result[5].merge!(val[0])
@@ -3958,7 +3957,7 @@ module_eval(<<'.,.,', 'parser.y', 1265)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1269)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1269)
   def _reduce_224(val, _values, result)
             result = empty_params_result
         result[5].merge!(val[0])
@@ -3967,7 +3966,7 @@ module_eval(<<'.,.,', 'parser.y', 1269)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1273)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1273)
   def _reduce_225(val, _values, result)
             result = empty_params_result
         result[6] = val[0]
@@ -3976,7 +3975,7 @@ module_eval(<<'.,.,', 'parser.y', 1273)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1279)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1279)
   def _reduce_226(val, _values, result)
             loc = val[0].location
         if val[1]
@@ -3995,7 +3994,7 @@ module_eval(<<'.,.,', 'parser.y', 1279)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1295)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1295)
   def _reduce_227(val, _values, result)
             if val[2]
           name_range = tokenizer.range(val[2])
@@ -4012,7 +4011,7 @@ module_eval(<<'.,.,', 'parser.y', 1295)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1309)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1309)
   def _reduce_228(val, _values, result)
             if val[2]
           name_range = tokenizer.range(val[2])
@@ -4029,7 +4028,7 @@ module_eval(<<'.,.,', 'parser.y', 1309)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1323)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1323)
   def _reduce_229(val, _values, result)
             if val[2]
           name_range = tokenizer.range(val[2])
@@ -4047,7 +4046,7 @@ module_eval(<<'.,.,', 'parser.y', 1323)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1338)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1338)
   def _reduce_230(val, _values, result)
             if val[3]
           name_range = tokenizer.range(val[3])
@@ -4065,7 +4064,7 @@ module_eval(<<'.,.,', 'parser.y', 1338)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1353)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1353)
   def _reduce_231(val, _values, result)
             if val[2]
           name_range = tokenizer.range(val[2])
@@ -4094,7 +4093,7 @@ module_eval(<<'.,.,', 'parser.y', 1353)
 
 # reduce 237 omitted
 
-module_eval(<<'.,.,', 'parser.y', 1370)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1370)
   def _reduce_238(val, _values, result)
             namespace = val[0]&.value || Namespace.empty
         name = value(val[1]).to_sym
@@ -4114,7 +4113,7 @@ module_eval(<<'.,.,', 'parser.y', 1370)
 
 # reduce 241 omitted
 
-module_eval(<<'.,.,', 'parser.y', 1384)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1384)
   def _reduce_242(val, _values, result)
             namespace = val[0]&.value || Namespace.empty
         name = value(val[1]).to_sym
@@ -4131,7 +4130,7 @@ module_eval(<<'.,.,', 'parser.y', 1384)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1398)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1398)
   def _reduce_243(val, _values, result)
             namespace = val[0]&.value || Namespace.empty
         name = value(val[1]).to_sym
@@ -4145,7 +4144,7 @@ module_eval(<<'.,.,', 'parser.y', 1398)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1409)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1409)
   def _reduce_244(val, _values, result)
             namespace = val[0]&.value || Namespace.empty
         name = value(val[1]).to_sym
@@ -4162,7 +4161,7 @@ module_eval(<<'.,.,', 'parser.y', 1409)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1423)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1423)
   def _reduce_245(val, _values, result)
             result = nil
 
@@ -4170,7 +4169,7 @@ module_eval(<<'.,.,', 'parser.y', 1423)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1426)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1426)
   def _reduce_246(val, _values, result)
             result = LocatedValue.new(value: Namespace.root, buffer: buffer, range: tokenizer.range(val[0]))
 
@@ -4178,7 +4177,7 @@ module_eval(<<'.,.,', 'parser.y', 1426)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1429)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1429)
   def _reduce_247(val, _values, result)
             namespace = Namespace.parse(value(val[1])).absolute!
         result = LocatedValue.new(value: namespace, buffer: buffer, range: tokenizer.start_pos(val[0])...tokenizer.end_pos(val[1]))
@@ -4187,7 +4186,7 @@ module_eval(<<'.,.,', 'parser.y', 1429)
   end
 .,.,
 
-module_eval(<<'.,.,', 'parser.y', 1433)
+module_eval(<<'.,.,', File.join(__dir__, 'parser.y'), 1433)
   def _reduce_248(val, _values, result)
             namespace = Namespace.parse(value(val[0]))
         result = LocatedValue.new(value: namespace, buffer: buffer, range: tokenizer.range(val[0]))

@@ -8,7 +8,7 @@ module RBS
       end
 
       def token_defs
-        @token_defs ||= {}
+        @token_defs ||= []
       end
 
       def pat(string)
@@ -20,22 +20,22 @@ module RBS
         end
       end
 
-      def token(token, pattern, name: new_name())
-        token_defs[name] = [pat(pattern), token, nil]
+      def token(token, pattern, captures: 0)
+        token_defs << [pat(pattern), captures, token, nil]
       end
 
-      def token_invoke(method, pattern, name: new_name())
-        token_defs[name] = [pat(pattern), nil, method]
+      def token_invoke(method, pattern, captures: 0)
+        token_defs << [pat(pattern), captures, nil, method]
       end
 
-      def skip(pattern, name: new_name())
-        token_defs[name] = [pat(pattern)]
+      def skip(pattern, captures: 0)
+        token_defs << [pat(pattern), captures]
       end
 
       def regexp
-        pats = token_defs.map do |name, tuple|
+        pats = token_defs.map do |tuple|
           pat = tuple[0]
-          /(?<#{name}>#{pat})/
+          /(#{pat})/
         end
 
         Regexp.union(*pats)
@@ -67,9 +67,11 @@ module RBS
       string = scanner.scan(@regexp)
 
       if string
-        @defs.each do |name, tuple|
-          if scanner[name]
-            if tuple.size == 1
+        pat_index = 0
+        @defs.each do |tuple|
+          pat_index += 1 + tuple[1]
+          if scanner[pat_index]
+            if tuple.size == 2
               # skip
               return next_token
             else
@@ -79,11 +81,11 @@ module RBS
               @start_poss[index] = charpos - string.size
               @end_poss[index] = charpos
 
-              if tok = tuple[1]
+              if tok = tuple[2]
                 @ret[0] = tok
                 @values[index] = string
               else
-                __send__(tuple[2], string) do |tok, value|
+                __send__(tuple[3], string) do |tok, value|
                   @ret[0] = tok
                   @values[index] = value
                 end

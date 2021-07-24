@@ -1715,17 +1715,17 @@ class Lex < Lexer
   )
 
   skip(/\s+/)
-  token(:tCOMMENT, /#(( *)|( ?(?<string>.*)))\n/)
+  token(:tCOMMENT, /#(?:(?: *)|(?: ?(?:.*)))\n/)
   token_invoke(:quoted_ident, /`[a-zA-Z_]\w*`/)
-  token_invoke(:quoted_method, /`(\\`|[^` :])+`/)
+  token_invoke(:quoted_method, /`(?:\\`|[^` :])+`/)
   token_invoke(:annotation, ANNOTATION_RE)
   token(:kSELFQ, "self?")
-  token(:tWRITE_ATTR, /(([a-zA-Z]\w*)|(_\w+))=/)
+  token(:tWRITE_ATTR, /(?:(?:[a-zA-Z]\w*)|(?:_\w+))=/)
   token_invoke(:keyword, KEYWORDS_RE)
-  token_invoke(:symbol, /:((@{,2}|\$)?\w+(\?|\!)?|[|&\/%~`^]|<=>|={2,3}|=~|[<>]{2}|[<>]=?|[-+]@?|\*{1,2}|\[\]=?|![=~]?)\b?/)
+  token_invoke(:symbol, /:(?:(?:@{,2}|\$)?\w+(?:\?|\!)?|[|&\/%~`^]|<=>|={2,3}|=~|[<>]{2}|[<>]=?|[-+]@?|\*{1,2}|\[\]=?|![=~]?)\b?/)
   token_invoke(:integer, /[+-]?\d[\d_]*/)
   token_invoke(:punct, PUNCTS_RE)
-  token(:tNAMESPACE, /(::)?([A-Z]\w*::)+/)
+  token(:tNAMESPACE, /(?:::)?(?:[A-Z]\w*::)+/)
   token_invoke(:lkeyword_arg, /[a-z_]\w*:/)
   token_invoke(:lkeyword_q_e_arg, /[a-z_]\w*[?!]:/)
   token_invoke(:ukeyword_arg, /[A-Z]\w*:/)
@@ -1738,8 +1738,8 @@ class Lex < Lexer
   token(:tLIDENT, /[a-z]\w*\b/)
   token(:tUNDERSCOREIDENT, /_[a-z]\w*\b/)
   token(:tPARAMNAME, /_[\w_]*\b/)
-  token_invoke(:double_quoted_string, /"(\\"|[^"])*"/)
-  token_invoke(:single_quoted_string, /'(\\'|[^'])*'/)
+  token_invoke(:double_quoted_string, /"(?:\\"|[^"])*"/)
+  token_invoke(:single_quoted_string, /'(?:\\'|[^'])*'/)
 
   def quoted_ident(string)
     string[0] = ""
@@ -1850,7 +1850,6 @@ def next_token
     pos = tokenizer.scanner.char_pos
     return [:tEOF, "$"]
   end
-
 
   ret = tokenizer.next_token() or return
 
