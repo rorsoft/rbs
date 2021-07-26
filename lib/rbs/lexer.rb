@@ -64,13 +64,14 @@ module RBS
     def next_token
       return if scanner.eos?
 
-      string = scanner.scan(@regexp)
+      chars = scanner.skip_chars(@regexp)
 
-      if string
+      if chars
         pat_index = 0
-        @defs.each do |tuple|
+        @defs.each_with_index do |tuple, token_index|
           pat_index += 1 + tuple[1]
-          if scanner[pat_index]
+          # if scanner[pat_index]
+          if scanner.capture?(pat_index)
             if tuple.size == 2
               # skip
               return next_token
@@ -78,13 +79,14 @@ module RBS
               index = new_index()
 
               charpos = scanner.charpos
-              @start_poss[index] = charpos - string.size
+              @start_poss[index] = charpos - chars
               @end_poss[index] = charpos
 
               if tok = tuple[2]
                 @ret[0] = tok
-                @values[index] = string
+                @values[index] = nil
               else
+                string = scanner.string[charpos - chars...charpos]
                 __send__(tuple[3], string) do |tok, value|
                   @ret[0] = tok
                   @values[index] = value
@@ -112,7 +114,10 @@ module RBS
     end
 
     def value(t)
-      @values[t]
+      @values[t] ||=
+        begin
+          scanner.string[start_pos(t)...end_pos(t)]
+        end
     end
 
     def start_pos(t)

@@ -15,6 +15,7 @@ gem "json-schema"
 gem 'stackprof'
 gem "goodcheck"
 gem "dbm"
+gem "strscan", path: "../strscan"
 
 # Test gems
 gem "rbs-amber", path: "test/assets/test-gem"
