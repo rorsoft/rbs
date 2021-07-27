@@ -1,29 +1,29 @@
 module RBS
   # Namespace instance represents a _prefix of module names_.
   #
-  #    vvvvvvvvvvvvvv  TypeName
-  #    RBS::Namespace
-  #    ^^^^^           Namespace
+  #     vvvvvvvvvvvvvv  TypeName
+  #     RBS::Namespace
+  #     ^^^^^           Namespace
   #
-  #    vvvvvvvvvv    TypeName
-  #    RBS::Types
-  #    ^^^^^         Namespace
+  #     vvvvvvvvvv    TypeName
+  #     RBS::Types
+  #     ^^^^^         Namespace
   #
-  #    vvvvvvvvvvvvvvvvv    TypeName
-  #    RBS::Types::Union
-  #    ^^^^^^^^^^^^         Namespace
+  #     vvvvvvvvvvvvvvvvv    TypeName
+  #     RBS::Types::Union
+  #     ^^^^^^^^^^^^         Namespace
   #
   # Note that `Namespace` is an RBS specific concept and there is no corresponding concept in Ruby.
   #
   # There are _absolute_ and _relative_ namespaces.
   #
-  #    Namespace(::RBS::)         # Absolute namespace
-  #    Namespace(  RBS::)         # Relative namespace
+  #     Namespace(::RBS::)         # Absolute namespace
+  #     Namespace(  RBS::)         # Relative namespace
   #
   # It also defines two special namespaces.
   #
-  #    ::              # _Root_ namespace
-  #                    # _Empty_ namespace
+  #     ::              # _Root_ namespace
+  #                     # _Empty_ namespace
   #
   class Namespace
     attr_reader path: Array[Symbol]
@@ -68,8 +68,8 @@ module RBS
 
     # Returns absolute namespace.
     #
-    #    Namespace("A").absolute!      # => Namespace("::A")
-    #    Namespace("::A").absolute!    # => Namespace("::A")
+    #     Namespace("A").absolute!      # => Namespace("::A")
+    #     Namespace("::A").absolute!    # => Namespace("::A")
     #
     def absolute!: () -> Namespace
 
@@ -91,7 +91,7 @@ module RBS
 
     # Returns a pair of parent namespace and a symbol of last component.
     #
-    #    Namespace("::A::B::C").split    # => [Namespace("::A::B::"), :C]
+    #     Namespace("::A::B::C").split    # => [Namespace("::A::B::"), :C]
     #
     def split: () -> [Namespace, Symbol]?
 

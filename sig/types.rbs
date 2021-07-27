@@ -32,9 +32,11 @@ module RBS
       # Returns a String representation.
       # `level` is used internally.
       #
-      #   parse("String").to_s               # => "String"
-      #   parse("String | Integer").to_s()   # => "String | Integer"
-      #   parse("String | Integer").to_s(1)  # => "(String | Integer)"
+      # ```
+      # parse("String").to_s               # => "String"
+      # parse("String | Integer").to_s()   # => "String | Integer"
+      # parse("String | Integer").to_s(1)  # => "(String | Integer)"
+      # ```
       #
       def to_s: (?Integer level) -> String
     end
@@ -201,9 +203,11 @@ module RBS
 
     # ClassInstance represents a type of an instance of a class.
     #
-    #    String           # Type of an instance of String class.
-    #    Array[String]    # Type of an instance of Array class with instances of String.
-    #    Kernel           # Type of an instance of a class which includes Kernel.
+    # ```rbs
+    # String           # Type of an instance of String class.
+    # Array[String]    # Type of an instance of Array class with instances of String.
+    # Kernel           # Type of an instance of a class which includes Kernel.
+    # ```
     #
     class ClassInstance
       include Application

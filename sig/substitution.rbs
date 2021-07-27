@@ -3,10 +3,12 @@ module RBS
   #
   # The substitution construction is in _destructive_ manner.
   #
-  #    sub = Substitution.new
-  #    sub.add(from: :A, to: type1)
-  #    sub.add(from: :B, to: type2)
-  #    sub.instance_type = type3
+  # ```rb
+  # sub = Substitution.new
+  # sub.add(from: :A, to: type1)
+  # sub.add(from: :B, to: type2)
+  # sub.instance_type = type3
+  # ```
   #
   class Substitution
     # A hash containing mapping from type variable name to type.

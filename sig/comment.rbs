@@ -2,9 +2,11 @@ module RBS
   module AST
     # RBS allows writing documentation of declarations and members.
     #
-    #    # This is a doc for class.
-    #    class Hello
-    #    end
+    # ```rbs
+    # # This is a doc for class.
+    # class Hello
+    # end
+    # ```
     #
     class Comment
       attr_reader string: String
